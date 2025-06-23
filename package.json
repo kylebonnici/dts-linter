@@ -26,12 +26,15 @@
   "description": "",
   "dependencies": {
     "devicetree-language-server": "^0.4.2",
+    "devicetree-language-server-types": "^0.0.2-alpha.7",
     "diff": "^8.0.2",
     "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-textdocument": "^1.0.12"
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "yargs": "^18.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.3",
+    "@types/yargs": "^17.0.33",
     "esbuild": "^0.25.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

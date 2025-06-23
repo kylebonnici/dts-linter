@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import cp from "child_process";
+import { ContextListItem, File } from "devicetree-language-server-types";
 import { createPatch } from "diff";
-import fs from "fs";
-import path from "path";
+import fs, { existsSync } from "fs";
+import path, { basename } from "path";
+import { fileURLToPath } from "url";
 import { createMessageConnection, MessageConnection } from "vscode-jsonrpc";
 import { StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 import {
@@ -12,6 +14,8 @@ import {
   TextEdit,
 } from "vscode-languageserver-protocol";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
 
 function toFileUri(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
@@ -24,7 +28,37 @@ function toFileUri(filePath: string): string {
   return `file://${resolvedPath}`;
 }
 
-async function run(filePaths: string[]) {
+const argv = yargs(hideBin(process.argv))
+  .option("files", {
+    type: "array",
+    describe: "List of files to format",
+    demandOption: true,
+  })
+  .option("logLevel", {
+    type: "string",
+    choices: ["none", "verbose", "diff"],
+    default: "none",
+    describe: "Log level for output",
+  })
+  .option("outFile", {
+    type: "string",
+    describe: "Path for diff file",
+  })
+  .strict()
+  .help()
+  .parseSync();
+
+type LogLevel = "none" | "verbose" | "diff";
+const files = argv.files as string[];
+const logLevel = argv.logLevel as LogLevel;
+const outFile: string | undefined = argv.outFile;
+
+run(files, logLevel, outFile).catch((err) => {
+  console.error("Error validating files:", err);
+  process.exit(1);
+});
+
+async function run(filePaths: string[], logLevel: LogLevel, outFile?: string) {
   const lspPath = "./dist/server.js";
 
   const lspProcess = cp.spawn(lspPath, ["--stdio"], {
@@ -40,17 +74,19 @@ async function run(filePaths: string[]) {
     new StreamMessageWriter(lspProcess.stdin)
   );
 
-  connection.onNotification("window/logMessage", (params) => {
-    const levelMap: Record<number, string> = {
-      1: "ERROR",
-      2: "WARN",
-      3: "INFO",
-      4: "LOG",
-    };
+  if (logLevel === "verbose") {
+    connection.onNotification("window/logMessage", (params) => {
+      const levelMap: Record<number, string> = {
+        1: "ERROR",
+        2: "WARN",
+        3: "INFO",
+        4: "LOG",
+      };
 
-    const level = levelMap[params.type as number] || "LOG";
-    console.log(`[LSP ${level}] ${params.message}`);
-  });
+      const level = levelMap[params.type as number] || "LOG";
+      console.log(`[LSP ${level}] ${params.message}`);
+    });
+  }
 
   connection.onRequest("workspace/workspaceFolders", () => {
     // Return workspace folders your client is aware of
@@ -90,13 +126,14 @@ async function run(filePaths: string[]) {
 
   let hasIssues = false;
 
+  const completedPaths = new Set<string>();
   const diffs: string[] = [];
-  for (const filePath of filePaths) {
-    const absPath = path.resolve(filePath);
-    const text = fs.readFileSync(absPath, "utf8");
+  const paths = new Set(filePaths);
+  for (const filePath of paths) {
+    const text = fs.readFileSync(filePath, "utf8");
 
     const textDocument: TextDocumentItem = {
-      uri: `file://${absPath}`,
+      uri: `file://${filePath}`,
       languageId: "devicetree",
       version: 0,
       text,
@@ -105,51 +142,43 @@ async function run(filePaths: string[]) {
     connection.sendNotification("textDocument/didOpen", {
       textDocument,
     });
-    const params: DocumentFormattingParams = {
-      textDocument: {
-        uri: `file://${absPath}`,
-      },
-      options: {
-        tabSize: 4,
-        insertSpaces: false,
-        trimTrailingWhitespace: true,
-      },
-    };
 
-    await waitForNewActiveContext(connection);
+    const context = await waitForNewActiveContext(connection);
+    const files = [
+      ...flatFileTree(context.mainDtsPath),
+      ...context.overlays.flatMap(flatFileTree),
+    ];
 
-    const edits = (await connection.sendRequest(
-      "textDocument/formatting",
-      params
-    )) as TextEdit[];
-    const newText = applyEdits(
-      TextDocument.create(`file://${absPath}`, "devicetree", 0, text),
-      edits
+    await Promise.all(
+      files.map(async (f) => {
+        if (!paths.has(f) || completedPaths.has(f)) {
+          return;
+        }
+
+        const text = fs.readFileSync(f, "utf8");
+        const diff = await formatFile(connection, f, text);
+        completedPaths.add(f);
+        if (diff) {
+          hasIssues = true;
+          if (outFile) {
+            diffs.push(diff);
+          }
+        }
+      })
     );
 
     connection.sendNotification("textDocument/didClose", {
       textDocument: {
-        uri: `file://${absPath}`,
+        uri: `file://${filePath}`,
       },
     });
 
-    await waitForNewContextDeletedt(connection);
-
-    const result = createPatch(`file://${absPath}`, text, newText);
-    if (newText !== text) {
-      console.error(`❌ Formatting issues in: ${filePath}`);
-      hasIssues = true;
-      console.log(result);
-      diffs.push(result);
-    } else {
-      console.log(`✅ ${filePath} is correctly formatted.`);
-    }
+    await waitForNewContextDeleted(connection);
   }
 
-  fs.writeFileSync(
-    "/Users/kylebonnici/workspace/personal/linter/diff",
-    diffs.join("\n\n")
-  );
+  if (outFile) {
+    fs.writeFileSync(outFile, diffs.join("\n\n"));
+  }
 
   console.log("Processed ", filePaths.length, "files");
   connection.dispose();
@@ -162,18 +191,9 @@ async function run(filePaths: string[]) {
   }
 }
 
-// Get CLI args
-const args = process.argv.slice(2);
-
-if (args.length === 0) {
-  console.error("Usage: ts-node validate-format.ts <file1> [file2] ...");
-  process.exit(1);
-}
-
-run(args).catch((err) => {
-  console.error("Error validating files:", err);
-  process.exit(1);
-});
+const flatFileTree = (file: File): string[] => {
+  return [file.file, ...file.includes.flatMap((f) => flatFileTree(f))];
+};
 
 export function applyEdits(document: TextDocument, edits: TextEdit[]): string {
   const text = document.getText();
@@ -214,25 +234,66 @@ export function applyEdits(document: TextDocument, edits: TextEdit[]): string {
   return result;
 }
 
+const formatFile = async (
+  connection: MessageConnection,
+  absPath: string,
+  text: string
+) => {
+  const params: DocumentFormattingParams = {
+    textDocument: {
+      uri: `file://${absPath}`,
+    },
+    options: {
+      tabSize: 4,
+      insertSpaces: false,
+      trimTrailingWhitespace: true,
+    },
+  };
+
+  const edits = (await connection.sendRequest(
+    "textDocument/formatting",
+    params
+  )) as TextEdit[];
+  const newText = applyEdits(
+    TextDocument.create(`file://${absPath}`, "devicetree", 0, text),
+    edits
+  );
+
+  const diff = createPatch(`file://${absPath}`, text, newText);
+  if (newText !== text) {
+    console.error(`❌ ${absPath}`);
+
+    if (logLevel !== "none") {
+      console.log(diff);
+    }
+    return diff;
+  } else {
+    console.log(`✅ ${absPath} is correctly formatted.`);
+  }
+};
+
 function waitForNewActiveContext(
   connection: MessageConnection,
   timeoutMs = 5000
-): Promise<void> {
+): Promise<ContextListItem> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error("Timed out waiting for devicetree/newActiveContext"));
       d.dispose();
     }, timeoutMs);
 
-    const d = connection.onNotification("devicetree/newActiveContext", () => {
-      clearTimeout(timeout);
-      resolve();
-      d.dispose();
-    });
+    const d = connection.onNotification(
+      "devicetree/newActiveContext",
+      (param: ContextListItem) => {
+        clearTimeout(timeout);
+        resolve(param);
+        d.dispose();
+      }
+    );
   });
 }
 
-function waitForNewContextDeletedt(
+function waitForNewContextDeleted(
   connection: MessageConnection,
   timeoutMs = 5000
 ): Promise<void> {

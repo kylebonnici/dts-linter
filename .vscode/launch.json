@@ -11,6 +11,7 @@
       ],
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
+        "--files",
         "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340_cpuapp_common.dtsi",
         "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340dk_common.dtsi"
       ],
