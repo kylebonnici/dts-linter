@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug validate-format.ts",
+      "name": "Debug dts-linter",
       "type": "node",
       "request": "launch",
       "runtimeArgs": [
@@ -10,7 +10,7 @@
         "ts-node/register"
       ],
       "args": [
-        "${workspaceFolder}/src/validate-format.ts",
+        "${workspaceFolder}/src/dts-linter.ts",
         "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340_cpuapp_common.dtsi",
         "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340dk_common.dtsi"
       ],

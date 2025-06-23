@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import cp from "child_process";
 import { createPatch } from "diff";
 import fs from "fs";
@@ -23,7 +25,7 @@ function toFileUri(filePath: string): string {
 }
 
 async function run(filePaths: string[]) {
-  const lspPath = "devicetree-language-server";
+  const lspPath = "./dist/server.js";
 
   const lspProcess = cp.spawn(lspPath, ["--stdio"], {
     stdio: ["pipe", "pipe", "pipe"],

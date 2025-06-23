@@ -1,3 +1,4 @@
 node_modules
 client/server
 tsconfig.types.tsbuildinfo
+dist
