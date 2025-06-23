@@ -124,11 +124,10 @@ async function run(filePaths: string[], logLevel: LogLevel, outFile?: string) {
 
   await connection.sendNotification("initialized");
 
-  let hasIssues = false;
-
   const completedPaths = new Set<string>();
   const diffs: string[] = [];
   const paths = new Set(filePaths);
+  let error = 0;
   for (const filePath of paths) {
     const text = fs.readFileSync(filePath, "utf8");
 
@@ -155,11 +154,10 @@ async function run(filePaths: string[], logLevel: LogLevel, outFile?: string) {
           return;
         }
 
-        const text = fs.readFileSync(f, "utf8");
-        const diff = await formatFile(connection, f, text);
+        const diff = await formatFile(connection, f);
         completedPaths.add(f);
         if (diff) {
-          hasIssues = true;
+          error++;
           if (outFile) {
             diffs.push(diff);
           }
@@ -184,9 +182,11 @@ async function run(filePaths: string[], logLevel: LogLevel, outFile?: string) {
   connection.dispose();
   lspProcess.kill();
 
-  if (hasIssues) {
+  if (error) {
+    console.log(`${error} of ${filePaths.length} Failed`);
     process.exit(1);
   } else {
+    console.log("All files passed");
     process.exit(0);
   }
 }
@@ -195,50 +195,7 @@ const flatFileTree = (file: File): string[] => {
   return [file.file, ...file.includes.flatMap((f) => flatFileTree(f))];
 };
 
-export function applyEdits(document: TextDocument, edits: TextEdit[]): string {
-  const text = document.getText();
-
-  // Enhanced sorting logic:
-  const sorted = edits.slice().sort((a, b) => {
-    const aStart = document.offsetAt(a.range.start);
-    const bStart = document.offsetAt(b.range.start);
-
-    if (aStart !== bStart) {
-      return bStart - aStart; // reverse order
-    }
-
-    // If same start offset, sort by end offset descending (longer edits first)
-    const aEnd = document.offsetAt(a.range.end);
-    const bEnd = document.offsetAt(b.range.end);
-    if (aEnd !== bEnd) {
-      return bEnd - aEnd;
-    }
-
-    // Optionally: insertions before deletions (if newText is empty or not)
-    const aIsInsertion = aStart === aEnd && a.newText.length > 0;
-    const bIsInsertion = bStart === bEnd && b.newText.length > 0;
-    if (aIsInsertion !== bIsInsertion) {
-      return aIsInsertion ? 1 : -1; // insertions later
-    }
-
-    return 0; // stable
-  });
-
-  let result = text;
-  for (const edit of sorted) {
-    const start = document.offsetAt(edit.range.start);
-    const end = document.offsetAt(edit.range.end);
-    result = result.slice(0, start) + edit.newText + result.slice(end);
-  }
-
-  return result;
-}
-
-const formatFile = async (
-  connection: MessageConnection,
-  absPath: string,
-  text: string
-) => {
+const formatFile = async (connection: MessageConnection, absPath: string) => {
   const params: DocumentFormattingParams = {
     textDocument: {
       uri: `file://${absPath}`,
@@ -250,17 +207,12 @@ const formatFile = async (
     },
   };
 
-  const edits = (await connection.sendRequest(
-    "textDocument/formatting",
+  const diff = (await connection.sendRequest(
+    "devicetree/formatingDiff",
     params
-  )) as TextEdit[];
-  const newText = applyEdits(
-    TextDocument.create(`file://${absPath}`, "devicetree", 0, text),
-    edits
-  );
+  )) as string | undefined;
 
-  const diff = createPatch(`file://${absPath}`, text, newText);
-  if (newText !== text) {
+  if (diff) {
     console.error(`❌ ${absPath}`);
 
     if (logLevel !== "none") {
