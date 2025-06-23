@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug validate-format.ts",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": [
+        "-r",
+        "ts-node/register"
+      ],
+      "args": [
+        "${workspaceFolder}/src/validate-format.ts",
+        "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340_cpuapp_common.dtsi",
+        "/opt/nordic/ncs/v3.0.2/zephyr/boards/nordic/nrf5340dk/nrf5340dk_common.dtsi"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "sourceMaps": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

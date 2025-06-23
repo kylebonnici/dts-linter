@@ -1,0 +1,23 @@
+{
+  "name": "linter",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "devicetree-language-server": "file:../dts-lsp/server/devicetree-language-server-0.4.3.tgz",
+    "diff": "^8.0.2",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
