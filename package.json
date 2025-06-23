@@ -21,8 +21,8 @@
     "devicetree",
     "formating"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Kyle Micallef Bonnici",
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "devicetree-language-server": "^0.4.2",
