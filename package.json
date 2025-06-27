@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.0.0-alpha2",
+  "version": "0.0.0-alpha3",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -11,7 +11,7 @@
     "compile:prod": "node ./esbuild.js --production && npm run bundle:dtslsp",
     "bundle:dtslsp": "cp ./node_modules/devicetree-language-server/dist/server.js ./dist/server.js"
   },
-  "bin": "dist/dts-linter.js",
+  "bin": "./dist/dts-linter.js",
   "files": [
     "dist/**"
   ],
@@ -29,11 +29,10 @@
     "devicetree-language-server-types": "^0.0.2-alpha.7",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-textdocument": "^1.0.12",
-    "yargs": "^18.0.0"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.0.3",
-    "@types/yargs": "^17.0.33",
     "esbuild": "^0.25.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"

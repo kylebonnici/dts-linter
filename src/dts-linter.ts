@@ -12,8 +12,9 @@ import {
   Diagnostic,
   DiagnosticSeverity,
 } from "vscode-languageserver-protocol";
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
+
+import { z } from "zod";
+import { parseArgs } from "node:util"; // Node.js 18+ built-in
 
 function toFileUri(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
@@ -26,52 +27,46 @@ function toFileUri(filePath: string): string {
   return `file://${resolvedPath}`;
 }
 
-const argv = yargs(hideBin(process.argv))
-  .option("files", {
-    type: "array",
-    describe: "List of files to format",
-    demandOption: true,
-  })
-  .option("includes", {
-    type: "array",
-    describe: "Include List",
-  })
-  .option("bindings", {
-    type: "array",
-    describe: "Bindings paths",
-  })
-  .option("logLevel", {
-    type: "string",
-    choices: ["none", "verbose", "issues"],
-    default: "none",
-    describe: "Log level for output",
-  })
-  .option("formating", {
-    type: "boolean",
-    default: true,
-    describe: "Format files",
-  })
-  .option("diagnostics", {
-    type: "boolean",
-    default: false,
-    describe: "Report diagnostics",
-  })
-  .option("outFile", {
-    type: "string",
-    describe: "Path for diff file",
-  })
-  .strict()
-  .help()
-  .parseSync();
+const schema = z.object({
+  files: z.array(z.string(), { required_error: "Missing --files" }),
+  includes: z.array(z.string()).optional().default([]),
+  bindings: z.array(z.string()).optional().default([]),
+  logLevel: z.enum(["none", "verbose", "issues"]).optional().default("none"),
+  formating: z.boolean().optional().default(false),
+  diagnostics: z.boolean().optional().default(false),
+  outFile: z.string().optional(),
+});
+
+const { values } = parseArgs({
+  options: {
+    files: { type: "string", multiple: true },
+    includes: { type: "string", multiple: true },
+    bindings: { type: "string", multiple: true },
+    logLevel: { type: "string" },
+    formating: { type: "boolean" },
+    diagnostics: { type: "boolean" },
+    outFile: { type: "string" },
+  },
+  strict: true,
+});
+
+const parsed = schema.safeParse(values);
+
+if (!parsed.success) {
+  console.error("❌ Invalid CLI input:\n", parsed.error.format());
+  process.exit(1);
+}
+
+const argv = parsed.data;
 
 type LogLevel = "none" | "verbose" | "diff";
-const files = argv.files as string[];
-const dtsIncludes = (argv.includes ?? []) as string[];
-const bindings = (argv.bindings ?? []) as string[];
+const files = argv.files;
+const dtsIncludes = argv.includes;
+const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
 const formating = argv.formating;
 const diagnostics = argv.diagnostics;
-const outFile: string | undefined = argv.outFile;
+const outFile = argv.outFile;
 
 run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
   console.error("Error validating files:", err);
