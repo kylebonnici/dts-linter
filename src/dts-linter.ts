@@ -16,6 +16,11 @@ import {
 import { z } from "zod";
 import { parseArgs } from "node:util"; // Node.js 18+ built-in
 
+const isDebugging = __dirname.endsWith("src");
+const serverPath = isDebugging
+  ? path.join(__dirname, "..", "dist", "server.js")
+  : path.join(__dirname, "server.js");
+
 function toFileUri(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
   // On Windows, convert backslashes to forward slashes
@@ -83,9 +88,7 @@ async function run(
   Bindings: string[],
   outFile?: string
 ) {
-  const lspPath = "./dist/server.js";
-
-  const lspProcess = cp.spawn(lspPath, ["--stdio"], {
+  const lspProcess = cp.spawn(serverPath, ["--stdio"], {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
