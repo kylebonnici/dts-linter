@@ -64,7 +64,7 @@ if (!parsed.success) {
 
 const argv = parsed.data;
 
-type LogLevel = "none" | "verbose" | "diff";
+type LogLevel = "none" | "verbose" | "issues";
 const files = argv.files;
 const dtsIncludes = argv.includes;
 const bindings = argv.bindings;
@@ -153,7 +153,16 @@ async function run(
 
   const completedPaths = new Set<string>();
   const diffs: string[] = [];
-  const paths = new Set(filePaths);
+  const paths = Array.from(new Set(filePaths)).sort((a, b) => {
+    const getPriority = (file: string): number => {
+      if (file.endsWith(".dts")) return 0;
+      if (file.endsWith(".dtsi")) return 1;
+
+      return 2;
+    };
+
+    return getPriority(a) - getPriority(b);
+  });
   let formatingErrors: { file: string; context: ContextListItem }[] = [];
   let diagnosticIssues: {
     file: string;
