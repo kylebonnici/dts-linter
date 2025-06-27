@@ -213,7 +213,7 @@ async function run(
           }
         }
 
-        if (diagnostics && !filePath.endsWith(".overlay")) {
+        if (diagnostics && filePath.endsWith(".dts")) {
           const issues = await fileDiagnosticIssues(connection, f);
           if (issues?.length) {
             diagnosticIssues.push({
