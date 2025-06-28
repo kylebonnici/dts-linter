@@ -32,12 +32,30 @@ function toFileUri(filePath: string): string {
   return `file://${resolvedPath}`;
 }
 
+function isGitCI(): boolean {
+  const env = process.env;
+
+  return Boolean(
+    env.CI &&
+      (env.GITHUB_ACTIONS || // GitHub Actions
+        env.GITLAB_CI || // GitLab CI
+        env.BITBUCKET_BUILD_NUMBER || // Bitbucket Pipelines
+        env.CIRCLECI || // CircleCI
+        env.TRAVIS) // Travis CI
+  );
+}
+
+const onGit = isGitCI();
+
+const grpStart = () => (onGit ? "::group::" : "");
+const grpEnd = () => (onGit ? "::endgroup::" : "");
+
 const schema = z.object({
   files: z.array(z.string(), { required_error: "Missing --files" }),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
-  logLevel: z.enum(["none", "verbose", "issues"]).optional().default("none"),
-  formating: z.boolean().optional().default(false),
+  logLevel: z.enum(["none", "verbose"]).optional().default("none"),
+  formatting: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
 });
@@ -48,7 +66,7 @@ const { values } = parseArgs({
     includes: { type: "string", multiple: true },
     bindings: { type: "string", multiple: true },
     logLevel: { type: "string" },
-    formating: { type: "boolean" },
+    formatting: { type: "boolean" },
     diagnostics: { type: "boolean" },
     outFile: { type: "string" },
   },
@@ -64,12 +82,12 @@ if (!parsed.success) {
 
 const argv = parsed.data;
 
-type LogLevel = "none" | "verbose" | "issues";
+type LogLevel = "none" | "verbose";
 const files = argv.files;
 const dtsIncludes = argv.includes;
 const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
-const formating = argv.formating;
+const formatting = argv.formatting;
 const diagnostics = argv.diagnostics;
 const outFile = argv.outFile;
 
@@ -85,7 +103,7 @@ async function run(
   filePaths: string[],
   logLevel: LogLevel,
   includesPaths: string[],
-  Bindings: string[],
+  bindings: string[],
   outFile?: string
 ) {
   const lspProcess = cp.spawn(serverPath, ["--stdio"], {
@@ -163,7 +181,7 @@ async function run(
 
     return getPriority(a) - getPriority(b);
   });
-  let formatingErrors: { file: string; context: ContextListItem }[] = [];
+  let formattingErrors: { file: string; context: ContextListItem }[] = [];
   let diagnosticIssues: {
     file: string;
     message: string;
@@ -199,11 +217,11 @@ async function run(
           return;
         }
 
-        if (formating) {
+        if (formatting) {
           const diff = await formatFile(connection, f);
           completedPaths.add(f);
           if (diff) {
-            formatingErrors.push({
+            formattingErrors.push({
               file: f,
               context,
             });
@@ -229,6 +247,8 @@ async function run(
                 .join("\n\t\t"),
             });
           }
+        } else {
+          `[${i}/${total}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`;
         }
       })
     );
@@ -250,28 +270,49 @@ async function run(
   connection.dispose();
   lspProcess.kill();
 
-  if (formatingErrors.length)
-    console.log(
-      `${formatingErrors.length} of ${completedPaths.size} Failed formating checks`
-    );
-  else console.log(`All files passed formating`);
+  if (formatting) {
+    if (formattingErrors.length)
+      console.log(
+        `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+      );
+    else console.log(`All files passed formatting`);
+  }
 
-  if (diagnosticIssues.length) {
+  if (diagnostics) {
     console.log("Diagnostic issues summary");
-    console.log(
-      diagnosticIssues
-        .map(
-          (issue) =>
-            `File: ${issue.file}\n\tBoard File: ${issue.context.mainDtsPath.file}\n\tIssues:\n\t\t${issue.message}`
-        )
-        .join("\n")
-    );
-    console.log(
-      `${diagnosticIssues.length} of ${completedPaths.size} Failed diagnostic checks`
-    );
-  } else console.log(`All files passed diagnostic checks`);
+    if (diagnosticIssues.length) {
+      console.log(
+        diagnosticIssues
+          .map(
+            (issue) =>
+              `${grpStart()}File: ${issue.file}\n\tBoard File: ${
+                issue.context.mainDtsPath.file
+              }\n\tIssues:\n\t\t${issue.message}\n${grpEnd()}`
+          )
+          .join("\n")
+      );
+      console.log(
+        `${diagnosticIssues.length} of ${completedPaths.size} Failed diagnostic checks`
+      );
+    }
 
-  process.exit(formatingErrors.length || diagnosticIssues ? 1 : 0);
+    if (processedDiagnosticChecks !== completedPaths.size) {
+      console.log(
+        `${completedPaths.size - processedDiagnosticChecks} of ${
+          completedPaths.size
+        } Skipped diagnostic checks`
+      );
+    }
+
+    if (
+      processedDiagnosticChecks === completedPaths.size &&
+      !formattingErrors.length
+    ) {
+      console.log(`All files passed diagnostic checks`);
+    }
+  }
+
+  process.exit(formattingErrors.length || diagnosticIssues ? 1 : 0);
 }
 
 const flatFileTree = (file: File): string[] => {
@@ -291,26 +332,27 @@ const formatFile = async (connection: MessageConnection, absPath: string) => {
   };
 
   const diff = (await connection.sendRequest(
-    "devicetree/formatingDiff",
+    "devicetree/formatingDiff", // TODO Fix formating -> formatting
     params
   )) as string | undefined;
 
   if (diff) {
-    console.error(`[${i}/${total}] ❌ ${absPath}`);
+    console.error(`${grpStart()}[${i}/${total}] ❌ ${absPath}`);
 
-    if (logLevel !== "none") {
-      console.log(diff);
-    }
+    console.log(`${diff}\n${grpEnd()}`);
+
     return diff;
   } else {
     console.log(`[${i}/${total}] ✅ ${absPath} is correctly formatted.`);
   }
 };
 
+let processedDiagnosticChecks = 0;
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
   absPath: string
 ) => {
+  processedDiagnosticChecks++;
   const issues = (
     ((await connection.sendRequest("devicetree/diagnosticIssues", {
       uri: `file://${absPath}`,
@@ -322,20 +364,20 @@ const fileDiagnosticIssues = async (
   );
 
   if (issues.length) {
-    console.error(
-      `[${i}/${total}] ❌ ${absPath} has ${issues.length} diagnostic errors!`
+    console.log(
+      `${grpStart()}[${i}/${total}] ❌ ${absPath} has ${
+        issues.length
+      } diagnostic errors!`
     );
 
-    if (logLevel !== "none") {
-      console.log(
-        issues.map(
-          (issue) =>
-            `${issue.message}: ${JSON.stringify(
-              issue.range.start
-            )}${JSON.stringify(issue.range.end)}`
-        )
-      );
-    }
+    console.log(
+      issues.map(
+        (issue) =>
+          `${issue.message}: ${JSON.stringify(
+            issue.range.start
+          )}${JSON.stringify(issue.range.end)}${grpEnd()}`
+      )
+    );
 
     return issues;
   } else {

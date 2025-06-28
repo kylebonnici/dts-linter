@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.0.0-alpha6",
+  "version": "0.0.0-alpha7",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -19,7 +19,7 @@
     "dts",
     "linter",
     "devicetree",
-    "formating"
+    "formatting"
   ],
   "author": "Kyle Micallef Bonnici",
   "license": "Apache-2.0",
