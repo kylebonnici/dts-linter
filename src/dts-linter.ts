@@ -371,13 +371,16 @@ const fileDiagnosticIssues = async (
     );
 
     console.log(
-      issues.map(
-        (issue) =>
-          `${issue.message}: ${JSON.stringify(
-            issue.range.start
-          )}${JSON.stringify(issue.range.end)}\n${grpEnd()}`
-      )
+      issues
+        .map(
+          (issue) =>
+            `${issue.message}: ${JSON.stringify(
+              issue.range.start
+            )}${JSON.stringify(issue.range.end)}`
+        )
+        .join("\n")
     );
+    console.log(grpEnd());
 
     return issues;
   } else {
