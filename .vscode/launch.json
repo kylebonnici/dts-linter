@@ -27,7 +27,7 @@
         "/opt/nordic/ncs/v3.0.2/zephyr/include",
         "--bindings",
         "/opt/nordic/ncs/v3.0.2/zephyr/dts/bindings",
-        "--formating",
+        "--formatting",
         "--diagnostics"
       ],
       "cwd": "${workspaceFolder}",

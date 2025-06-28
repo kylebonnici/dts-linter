@@ -375,7 +375,7 @@ const fileDiagnosticIssues = async (
         (issue) =>
           `${issue.message}: ${JSON.stringify(
             issue.range.start
-          )}${JSON.stringify(issue.range.end)}${grpEnd()}`
+          )}${JSON.stringify(issue.range.end)}\n${grpEnd()}`
       )
     );
 
