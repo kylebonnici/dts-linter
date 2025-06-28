@@ -248,7 +248,9 @@ async function run(
             });
           }
         } else {
-          `[${i}/${total}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`;
+          console.log(
+            `[${i}/${total}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+          );
         }
       })
     );
