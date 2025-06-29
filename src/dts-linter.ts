@@ -266,7 +266,10 @@ async function run(
             }
           } else {
             console.log(
-              `[${progressString}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+              `[${progressString(
+                mainFile,
+                j
+              )}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
             );
           }
 
