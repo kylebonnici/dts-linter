@@ -215,8 +215,8 @@ async function run(
     const progressString = (isMainFile: boolean, j: number) =>
       isMainFile
         ? `[${i}/${total}]`
-        : `[${j + 1}/${files.length}]`.padEnd(
-            files.length.toString().length * 2 + 3,
+        : `[${j}/${files.length - 1}]`.padEnd(
+            (files.length - 1).toString().length * 2 + 3,
             " "
           );
 
