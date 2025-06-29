@@ -265,6 +265,7 @@ async function run(
               });
             }
           } else {
+            skippeddDiagnosticChecks.add(f);
             console.log(
               `${mainFile ? "" : "\t"}${progressString(
                 mainFile,
@@ -298,9 +299,9 @@ async function run(
   if (formatting) {
     if (formattingErrors.length)
       console.log(
-        `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+        `❌ ${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
       );
-    else console.log(`All files passed formatting`);
+    else console.log(`✅ All files passed formatting`);
   }
 
   if (diagnostics) {
@@ -317,17 +318,15 @@ async function run(
           .join("\n")
       );
       console.log(
-        `${
+        `\n❌ ${
           Array.from(diagnosticIssues.values()).map((v) => v.file).length
         } of ${completedPaths.size} Failed diagnostic checks`
       );
     }
 
-    if (processedDiagnosticChecks.size !== completedPaths.size) {
+    if (skippeddDiagnosticChecks.size) {
       console.log(
-        `${completedPaths.size - processedDiagnosticChecks.size} of ${
-          completedPaths.size
-        } Skipped diagnostic checks`
+        `⚠️ ${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
       );
     }
 
@@ -335,7 +334,7 @@ async function run(
       processedDiagnosticChecks.size === completedPaths.size &&
       !diagnosticIssues.length
     ) {
-      console.log(`All files passed diagnostic checks`);
+      console.log(`✅ All files passed diagnostic checks`);
     }
   }
 
@@ -402,6 +401,7 @@ const formatFile = async (
 };
 
 let processedDiagnosticChecks = new Set<string>();
+let skippeddDiagnosticChecks = new Set<string>();
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
   absPath: string,
