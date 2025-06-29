@@ -226,7 +226,7 @@ async function run(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
 
-          const diff = await formatFile(
+          await formatFile(
             connection,
             f,
             mainFile,
@@ -369,7 +369,7 @@ const formatFile = async (
   const indent = mainFile ? "" : "\t";
 
   if (diff) {
-    console.error(
+    console.log(
       `${grpStart()}${indent}${progressString} ❌ ${absPath} is not correctly formatted.`
     );
 
@@ -387,7 +387,8 @@ const formatFile = async (
       diffs.set(absPath, diff);
     }
 
-    console.log(`${diff}\n${grpEnd()}`);
+    console.log(diff);
+    console.log(grpEnd());
 
     return diff;
   } else {
