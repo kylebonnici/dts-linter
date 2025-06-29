@@ -98,6 +98,13 @@ run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
 
 let i = 0;
 let total = files.length;
+const diffs = new Map<string, string>();
+let formattingErrors: { file: string; context: ContextListItem }[] = [];
+let diagnosticIssues: {
+  file: string;
+  message: string;
+  context: ContextListItem;
+}[] = [];
 
 async function run(
   filePaths: string[],
@@ -170,7 +177,7 @@ async function run(
   await connection.sendNotification("initialized");
 
   const completedPaths = new Set<string>();
-  const diffs = new Map<string, string>();
+
   const paths = Array.from(new Set(filePaths)).sort((a, b) => {
     const getPriority = (file: string): number => {
       if (file.endsWith(".dts")) return 0;
@@ -181,12 +188,6 @@ async function run(
 
     return getPriority(a) - getPriority(b);
   });
-  let formattingErrors: { file: string; context: ContextListItem }[] = [];
-  let diagnosticIssues: {
-    file: string;
-    message: string;
-    context: ContextListItem;
-  }[] = [];
 
   for (const filePath of paths) {
     i++;
@@ -229,24 +230,9 @@ async function run(
             connection,
             f,
             mainFile,
-            progressString(mainFile, j)
+            progressString(mainFile, j),
+            context
           );
-          if (diff) {
-            formattingErrors.push({
-              file: f,
-              context,
-            });
-
-            if (diffs.has(f)) {
-              if (diffs.get(f) !== diff) {
-                console.log(
-                  `[${progressString}] ⚠️ Multiple diffs for the same file. This diff will not be in the generated file!`
-                );
-              }
-            } else {
-              diffs.set(f, diff);
-            }
-          }
 
           completedPaths.add(f);
         })
@@ -328,21 +314,23 @@ async function run(
           .join("\n")
       );
       console.log(
-        `${diagnosticIssues.length} of ${completedPaths.size} Failed diagnostic checks`
+        `${
+          Array.from(diagnosticIssues.values()).map((v) => v.file).length
+        } of ${completedPaths.size} Failed diagnostic checks`
       );
     }
 
-    if (processedDiagnosticChecks !== completedPaths.size) {
+    if (processedDiagnosticChecks.size !== completedPaths.size) {
       console.log(
-        `${completedPaths.size - processedDiagnosticChecks} of ${
+        `${completedPaths.size - processedDiagnosticChecks.size} of ${
           completedPaths.size
         } Skipped diagnostic checks`
       );
     }
 
     if (
-      processedDiagnosticChecks === completedPaths.size &&
-      !formattingErrors.length
+      processedDiagnosticChecks.size === completedPaths.size &&
+      !diagnosticIssues.length
     ) {
       console.log(`All files passed diagnostic checks`);
     }
@@ -359,7 +347,8 @@ const formatFile = async (
   connection: MessageConnection,
   absPath: string,
   mainFile: boolean,
-  progressString: string
+  progressString: string,
+  context: ContextListItem
 ) => {
   const params: DocumentFormattingParams = {
     textDocument: {
@@ -384,6 +373,20 @@ const formatFile = async (
       `${grpStart()}${indent}${progressString} ❌ ${absPath} is not correctly formatted.`
     );
 
+    if (diffs.has(absPath)) {
+      if (diffs.get(absPath) !== diff && outFile) {
+        console.log(
+          `${indent} ⚠️ Multiple diffs for the same file. This diff will not be in the generated file!`
+        );
+      }
+    } else {
+      formattingErrors.push({
+        file: absPath,
+        context,
+      });
+      diffs.set(absPath, diff);
+    }
+
     console.log(`${diff}\n${grpEnd()}`);
 
     return diff;
@@ -394,14 +397,14 @@ const formatFile = async (
   }
 };
 
-let processedDiagnosticChecks = 0;
+let processedDiagnosticChecks = new Set<string>();
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
   absPath: string,
   mainFile: boolean,
   progressString: string
 ) => {
-  processedDiagnosticChecks++;
+  processedDiagnosticChecks.add(absPath);
   const issues = (
     ((await connection.sendRequest("devicetree/diagnosticIssues", {
       uri: `file://${absPath}`,
