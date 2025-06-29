@@ -425,7 +425,7 @@ const fileDiagnosticIssues = async (
       issues
         .map(
           (issue) =>
-            `${indent}${issue.message}: ${JSON.stringify(
+            `${indent}\t${issue.message}: ${JSON.stringify(
               issue.range.start
             )}${JSON.stringify(issue.range.end)}`
         )
