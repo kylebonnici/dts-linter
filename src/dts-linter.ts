@@ -381,7 +381,7 @@ const formatFile = async (
 
   if (diff) {
     console.error(
-      `${indent}${grpStart()}${progressString} ❌ ${absPath} is not correctly formatted.`
+      `${grpStart()}${indent}${progressString} ❌ ${absPath} is not correctly formatted.`
     );
 
     console.log(`${diff}\n${grpEnd()}`);
@@ -416,7 +416,7 @@ const fileDiagnosticIssues = async (
 
   if (issues.length) {
     console.log(
-      `${indent}${grpStart()}${progressString} ❌ ${absPath} has ${
+      `${grpStart()}${indent}${progressString} ❌ ${absPath} has ${
         issues.length
       } diagnostic errors!`
     );
