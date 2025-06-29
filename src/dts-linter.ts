@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import cp, { execFileSync } from "child_process";
+import cp from "child_process";
 import { ContextListItem, File } from "devicetree-language-server-types";
 import fs, { existsSync } from "fs";
 import path from "path";
@@ -14,7 +14,7 @@ import {
 } from "vscode-languageserver-protocol";
 
 import { z } from "zod";
-import { parseArgs } from "node:util"; // Node.js 18+ built-in
+import { parseArgs } from "node:util";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -170,7 +170,7 @@ async function run(
   await connection.sendNotification("initialized");
 
   const completedPaths = new Set<string>();
-  const diffs: string[] = [];
+  const diffs = new Map<string, string>();
   const paths = Array.from(new Set(filePaths)).sort((a, b) => {
     const getPriority = (file: string): number => {
       if (file.endsWith(".dts")) return 0;
@@ -211,49 +211,91 @@ async function run(
           ...context.overlays.flatMap(flatFileTree),
         ];
 
-    await Promise.all(
-      files.map(async (f) => {
-        if (completedPaths.has(f) || f.endsWith(".h") || !existsSync(f)) {
-          return;
-        }
+    const isMainFile = (f: string) => f === filePath;
+    const progressString = (isMainFile: boolean, j: number) =>
+      isMainFile
+        ? `[${i}/${total}]`
+        : `[${j + 1}/${files.length}]`.padEnd(
+            files.length.toString().length * 2 + 3,
+            " "
+          );
 
-        if (formatting) {
-          const diff = await formatFile(connection, f);
-          completedPaths.add(f);
+    if (formatting) {
+      await Promise.all(
+        files.map(async (f, j) => {
+          if (f.endsWith(".h") || !existsSync(f)) {
+            return;
+          }
+
+          const mainFile = isMainFile(f);
+
+          const diff = await formatFile(
+            connection,
+            f,
+            mainFile,
+            progressString(mainFile, j)
+          );
           if (diff) {
             formattingErrors.push({
               file: f,
               context,
             });
-            if (outFile) {
-              diffs.push(diff);
+
+            if (diffs.has(f)) {
+              if (diffs.get(f) !== diff) {
+                console.log(
+                  `[${progressString}] ⚠️ Multiple diffs for the same file. This diff will not be in the generated file!`
+                );
+              }
+            } else {
+              diffs.set(f, diff);
             }
           }
-        }
 
-        if (diagnostics && filePath.endsWith(".dts")) {
-          const issues = await fileDiagnosticIssues(connection, f);
-          if (issues?.length) {
-            diagnosticIssues.push({
-              file: f,
-              context,
-              message: issues
-                .map(
-                  (issue) =>
-                    `${issue.message}: {${JSON.stringify(
-                      issue.range.start
-                    )}}-{${JSON.stringify(issue.range.end)}}`
-                )
-                .join("\n\t\t"),
-            });
+          completedPaths.add(f);
+        })
+      );
+    }
+
+    if (diagnostics) {
+      await Promise.all(
+        files.map(async (f, j) => {
+          if (f.endsWith(".h") || !existsSync(f)) {
+            return;
           }
-        } else {
-          console.log(
-            `[${i}/${total}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
-          );
-        }
-      })
-    );
+
+          const mainFile = isMainFile(f);
+          if (filePath.endsWith(".dts")) {
+            const issues = await fileDiagnosticIssues(
+              connection,
+              f,
+              mainFile,
+              progressString(mainFile, j)
+            );
+            if (issues?.length) {
+              diagnosticIssues.push({
+                file: f,
+                context,
+                message: issues
+                  .map(
+                    (issue) =>
+                      `${issue.message}: {${JSON.stringify(
+                        issue.range.start
+                      )}}-{${JSON.stringify(issue.range.end)}}`
+                  )
+                  .join("\n\t\t"),
+              });
+            }
+          } else {
+            console.log(
+              `[${progressString}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+            );
+          }
+
+          completedPaths.add(f);
+        })
+      );
+    }
 
     connection.sendNotification("textDocument/didClose", {
       textDocument: {
@@ -265,7 +307,7 @@ async function run(
   }
 
   if (outFile) {
-    fs.writeFileSync(outFile, diffs.join("\n\n"));
+    fs.writeFileSync(outFile, Array.from(diffs.values()).join("\n\n"));
   }
 
   console.log("Processed", completedPaths.size, "files");
@@ -321,7 +363,12 @@ const flatFileTree = (file: File): string[] => {
   return [file.file, ...file.includes.flatMap((f) => flatFileTree(f))];
 };
 
-const formatFile = async (connection: MessageConnection, absPath: string) => {
+const formatFile = async (
+  connection: MessageConnection,
+  absPath: string,
+  mainFile: boolean,
+  progressString: string
+) => {
   const params: DocumentFormattingParams = {
     textDocument: {
       uri: `file://${absPath}`,
@@ -338,21 +385,29 @@ const formatFile = async (connection: MessageConnection, absPath: string) => {
     params
   )) as string | undefined;
 
+  const indent = mainFile ? "" : "\t";
+
   if (diff) {
-    console.error(`${grpStart()}[${i}/${total}] ❌ ${absPath}`);
+    console.error(
+      `${indent}${grpStart()}${progressString} ❌ ${absPath} is not correctly formatted.`
+    );
 
     console.log(`${diff}\n${grpEnd()}`);
 
     return diff;
   } else {
-    console.log(`[${i}/${total}] ✅ ${absPath} is correctly formatted.`);
+    console.log(
+      `${indent}${progressString} ✅ ${absPath} is correctly formatted.`
+    );
   }
 };
 
 let processedDiagnosticChecks = 0;
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
-  absPath: string
+  absPath: string,
+  mainFile: boolean,
+  progressString: string
 ) => {
   processedDiagnosticChecks++;
   const issues = (
@@ -365,9 +420,11 @@ const fileDiagnosticIssues = async (
       issue.severity === DiagnosticSeverity.Warning
   );
 
+  const indent = mainFile ? "" : "\t";
+
   if (issues.length) {
     console.log(
-      `${grpStart()}[${i}/${total}] ❌ ${absPath} has ${
+      `${indent}${grpStart()}${progressString} ❌ ${absPath} has ${
         issues.length
       } diagnostic errors!`
     );
@@ -376,7 +433,7 @@ const fileDiagnosticIssues = async (
       issues
         .map(
           (issue) =>
-            `${issue.message}: ${JSON.stringify(
+            `${indent}${issue.message}: ${JSON.stringify(
               issue.range.start
             )}${JSON.stringify(issue.range.end)}`
         )
@@ -386,7 +443,9 @@ const fileDiagnosticIssues = async (
 
     return issues;
   } else {
-    console.log(`[${i}/${total}] ✅ ${absPath} has no diagnostic errors.`);
+    console.log(
+      `${indent}${progressString} ✅ ${absPath} has no diagnostic errors.`
+    );
   }
 };
 
