@@ -266,10 +266,10 @@ async function run(
             }
           } else {
             console.log(
-              `[${progressString(
+              `${mainFile ? "" : "\t"}${progressString(
                 mainFile,
                 j
-              )}] ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+              )} ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
             );
           }
 
