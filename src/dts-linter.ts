@@ -209,7 +209,7 @@ async function run(
       : [
           ...flatFileTree(context.mainDtsPath),
           ...context.overlays.flatMap(flatFileTree),
-        ];
+        ].filter((f) => !f.endsWith(".h") && existsSync(f));
 
     const isMainFile = (f: string) => f === filePath;
     const progressString = (isMainFile: boolean, j: number) =>
@@ -223,10 +223,6 @@ async function run(
     if (formatting) {
       await Promise.all(
         files.map(async (f, j) => {
-          if (f.endsWith(".h") || !existsSync(f)) {
-            return;
-          }
-
           const mainFile = isMainFile(f);
 
           const diff = await formatFile(
@@ -260,10 +256,6 @@ async function run(
     if (diagnostics) {
       await Promise.all(
         files.map(async (f, j) => {
-          if (f.endsWith(".h") || !existsSync(f)) {
-            return;
-          }
-
           const mainFile = isMainFile(f);
           if (filePath.endsWith(".dts")) {
             const issues = await fileDiagnosticIssues(
