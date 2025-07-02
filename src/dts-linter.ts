@@ -52,10 +52,12 @@ const grpEnd = () => (onGit ? "::endgroup::" : "");
 
 const schema = z.object({
   files: z.array(z.string(), { required_error: "Missing --files" }),
+  cwd: z.string().optional(),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
   logLevel: z.enum(["none", "verbose"]).optional().default("none"),
-  formatting: z.boolean().optional().default(false),
+  format: z.boolean().optional().default(false),
+  formatFixAll: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
 });
@@ -63,10 +65,12 @@ const schema = z.object({
 const { values } = parseArgs({
   options: {
     files: { type: "string", multiple: true },
+    cwd: { type: "string" },
     includes: { type: "string", multiple: true },
     bindings: { type: "string", multiple: true },
     logLevel: { type: "string" },
-    formatting: { type: "boolean" },
+    format: { type: "boolean" },
+    formatFixAll: { type: "boolean" },
     diagnostics: { type: "boolean" },
     outFile: { type: "string" },
   },
@@ -87,9 +91,11 @@ const files = argv.files;
 const dtsIncludes = argv.includes;
 const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
-const formatting = argv.formatting;
+const formatFixAll = argv.formatFixAll;
+const format = argv.format || formatFixAll;
 const diagnostics = argv.diagnostics;
 const outFile = argv.outFile;
+const cwd = argv.cwd;
 
 run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
   console.error("Error validating files:", err);
@@ -158,6 +164,7 @@ async function run(
         defaultIncludePaths: includesPaths,
         defaultBindingType: "Zephyr",
         defaultZephyrBindings: bindings,
+        cwd,
         autoChangeContext: true,
         allowAdhocContexts: true,
         defaultLockRenameEdits: [],
@@ -221,7 +228,7 @@ async function run(
             " "
           );
 
-    if (formatting) {
+    if (format) {
       await Promise.all(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
@@ -296,7 +303,7 @@ async function run(
   connection.dispose();
   lspProcess.kill();
 
-  if (formatting) {
+  if (format) {
     if (formattingErrors.length)
       console.log(
         `❌ ${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
@@ -364,7 +371,7 @@ const formatFile = async (
   };
 
   const diff = (await connection.sendRequest(
-    "devicetree/formatingDiff", // TODO Fix formating -> formatting
+    "devicetree/formattingDiff",
     params
   )) as string | undefined;
 
