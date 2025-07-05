@@ -64,36 +64,42 @@ const schema = z.object({
   outFile: z.string().optional(),
   help: z.boolean().optional().default(false),
 });
-
-const { values } = parseArgs({
-  options: {
-    files: { type: "string", multiple: true },
-    cwd: { type: "string" },
-    includes: { type: "string", multiple: true },
-    bindings: { type: "string", multiple: true },
-    logLevel: { type: "string" },
-    format: { type: "boolean" },
-    formatFixAll: { type: "boolean" },
-    parseIncludes: { type: "boolean" },
-    diagnostics: { type: "boolean" },
-    outFile: { type: "string" },
-    help: { type: "boolean" },
-  },
-  strict: true,
-});
+type SchemaType = z.infer<typeof schema>;
 
 const helpString = "Help TODO";
 
-const parsed = schema.safeParse(values);
+let argv: SchemaType;
+try {
+  const { values } = parseArgs({
+    options: {
+      files: { type: "string", multiple: true },
+      cwd: { type: "string" },
+      includes: { type: "string", multiple: true },
+      bindings: { type: "string", multiple: true },
+      logLevel: { type: "string" },
+      format: { type: "boolean" },
+      formatFixAll: { type: "boolean" },
+      parseIncludes: { type: "boolean" },
+      diagnostics: { type: "boolean" },
+      outFile: { type: "string" },
+      help: { type: "boolean" },
+    },
+    strict: true,
+  });
 
-if (!parsed.success) {
-  console.error("❌ Invalid CLI input:\n", parsed.error.format());
+  const safeParseData = schema.safeParse(values);
+  if (!safeParseData.success) {
+    console.error("❌ Invalid CLI input:\n", safeParseData.error.format());
+    process.exit(1);
+  }
+  argv = safeParseData.data;
+} catch {
+  console.log(helpString);
   process.exit(1);
 }
 
-const argv = parsed.data;
-
 if (argv.help) {
+  console.log("Invalid arguments");
   console.log(helpString);
   process.exit(0);
 }
@@ -111,7 +117,6 @@ const format = argv.format || formatFixAll;
 const diagnostics = argv.diagnostics;
 const parseIncludes = argv.parseIncludes;
 const outFile = argv.outFile;
-
 
 let i = 0;
 let total = filePaths.length;
