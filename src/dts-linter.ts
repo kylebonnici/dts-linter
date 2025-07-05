@@ -59,6 +59,7 @@ const schema = z.object({
   logLevel: z.enum(["none", "verbose"]).optional().default("none"),
   format: z.boolean().optional().default(false),
   formatFixAll: z.boolean().optional().default(false),
+  parseIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
 });
@@ -72,6 +73,7 @@ const { values } = parseArgs({
     logLevel: { type: "string" },
     format: { type: "boolean" },
     formatFixAll: { type: "boolean" },
+    parseIncludes: { type: "boolean" },
     diagnostics: { type: "boolean" },
     outFile: { type: "string" },
   },
@@ -216,7 +218,12 @@ async function run() {
       : [
           ...flatFileTree(context.mainDtsPath),
           ...context.overlays.flatMap(flatFileTree),
-        ].filter((f) => !f.endsWith(".h") && existsSync(f));
+        ].filter(
+          (f) =>
+            !f.endsWith(".h") &&
+            existsSync(f) &&
+            (parseIncludes || paths.includes(f))
+        );
 
     const isMainFile = (f: string) => f === filePath;
     const progressString = (isMainFile: boolean, j: number) =>
