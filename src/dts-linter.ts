@@ -52,7 +52,7 @@ const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
 
 const schema = z.object({
-  files: z.array(z.string(), { required_error: "Missing --files" }),
+  files: z.array(z.string().optional()),
   cwd: z.string().optional(),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
