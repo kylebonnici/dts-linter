@@ -364,7 +364,7 @@ const formatFile = async (
       uri: `file://${absPath}`,
     },
     options: {
-      tabSize: 4,
+      tabSize: 8,
       insertSpaces: false,
       trimTrailingWhitespace: true,
     },
