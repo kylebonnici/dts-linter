@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import { applyPatch } from "diff";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -199,6 +200,7 @@ async function run() {
   await connection.sendNotification("initialized");
 
   const completedPaths = new Set<string>();
+  const diffApplied = new Set<string>();
 
   const paths = Array.from(new Set(filePaths)).sort((a, b) => {
     const getPriority = (file: string): number => {
@@ -227,17 +229,15 @@ async function run() {
     });
 
     const context = await waitForNewActiveContext(connection);
-    const files = filePath.endsWith(".overlay")
-      ? [context.mainDtsPath.file]
-      : [
-          ...flatFileTree(context.mainDtsPath),
-          ...context.overlays.flatMap(flatFileTree),
-        ].filter(
-          (f) =>
-            !f.endsWith(".h") &&
-            existsSync(f) &&
-            (parseIncludes || paths.includes(f))
-        );
+    const files = [
+      ...flatFileTree(context.mainDtsPath),
+      ...context.overlays.flatMap(flatFileTree),
+    ].filter(
+      (f) =>
+        !f.endsWith(".h") &&
+        existsSync(f) &&
+        (parseIncludes || paths.includes(f))
+    );
 
     const isMainFile = (f: string) => f === filePath;
     const progressString = (isMainFile: boolean, j: number) =>
@@ -313,6 +313,23 @@ async function run() {
     });
 
     await waitForNewContextDeleted(connection);
+
+    if (formatFixAll) {
+      files
+        .filter((f) => !diffApplied.has(f))
+        .forEach((f) => {
+          const diff = diffs.get(f);
+          if (diff) {
+            const result = applyPatch(fs.readFileSync(f, "utf8"), diff);
+            if (result) {
+              diffApplied.add(f);
+              fs.writeFileSync(f, result, "utf8");
+            } else {
+              console.log(`❌ Failed to apply changes to ${f}`);
+            }
+          }
+        });
+    }
   }
 
   if (outFile) {
