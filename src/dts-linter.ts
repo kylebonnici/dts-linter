@@ -62,6 +62,7 @@ const schema = z.object({
   parseIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
+  help: z.boolean().optional().default(false),
 });
 
 const { values } = parseArgs({
@@ -76,9 +77,12 @@ const { values } = parseArgs({
     parseIncludes: { type: "boolean" },
     diagnostics: { type: "boolean" },
     outFile: { type: "string" },
+    help: { type: "boolean" },
   },
   strict: true,
 });
+
+const helpString = "Help TODO";
 
 const parsed = schema.safeParse(values);
 
@@ -88,6 +92,11 @@ if (!parsed.success) {
 }
 
 const argv = parsed.data;
+
+if (argv.help) {
+  console.log(helpString);
+  process.exit(0);
+}
 
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
