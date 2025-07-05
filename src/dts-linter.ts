@@ -62,6 +62,7 @@ const schema = z.object({
   formatFixAll: z.boolean().optional().default(false),
   processIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
+  diagnosticsFull: z.boolean().optional().default(false),
   outFile: z.string().optional(),
   help: z.boolean().optional().default(false),
 });
@@ -82,6 +83,7 @@ try {
       formatFixAll: { type: "boolean" },
       processIncludes: { type: "boolean" },
       diagnostics: { type: "boolean" },
+      diagnosticsFull: { type: "boolean" },
       outFile: { type: "string" },
       help: { type: "boolean" },
     },
@@ -115,7 +117,8 @@ const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
-const diagnostics = argv.diagnostics;
+const diagnosticsFull = argv.diagnosticsFull;
+const diagnostics = argv.diagnostics || diagnosticsFull;
 const processIncludes = argv.processIncludes;
 const outFile = argv.outFile;
 
@@ -271,7 +274,7 @@ async function run() {
       await Promise.all(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
-          if (filePath.endsWith(".dts")) {
+          if (filePath.endsWith(".dts") || !diagnosticsFull) {
             const issues = await fileDiagnosticIssues(
               connection,
               f,
@@ -285,9 +288,9 @@ async function run() {
                 message: issues
                   .map(
                     (issue) =>
-                      `${issue.message}: {${JSON.stringify(
+                      `${issue.message}: ${JSON.stringify(
                         issue.range.start
-                      )}}-{${JSON.stringify(issue.range.end)}}`
+                      )}-${JSON.stringify(issue.range.end)}`
                   )
                   .join("\n\t\t"),
               });
@@ -457,6 +460,7 @@ const fileDiagnosticIssues = async (
   const issues = (
     ((await connection.sendRequest("devicetree/diagnosticIssues", {
       uri: `file://${absPath}`,
+      full: diagnosticsFull,
     })) as Diagnostic[] | undefined) ?? []
   ).filter(
     (issue) =>
