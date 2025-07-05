@@ -15,6 +15,7 @@ import {
 
 import { z } from "zod";
 import { parseArgs } from "node:util";
+import { resolve } from "node:path";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -87,15 +88,18 @@ if (!parsed.success) {
 const argv = parsed.data;
 
 type LogLevel = "none" | "verbose";
-const files = argv.files;
-const dtsIncludes = argv.includes;
+const cwd = argv.cwd ?? process.cwd();
+const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
+  resolve(f, cwd)
+);
+const includesPaths = argv.includes;
 const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
 const diagnostics = argv.diagnostics;
+const parseIncludes = argv.parseIncludes;
 const outFile = argv.outFile;
-const cwd = argv.cwd;
 
 run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
   console.error("Error validating files:", err);
@@ -112,13 +116,12 @@ let diagnosticIssues: {
   context: ContextListItem;
 }[] = [];
 
-async function run(
-  filePaths: string[],
-  logLevel: LogLevel,
-  includesPaths: string[],
-  bindings: string[],
-  outFile?: string
-) {
+run().catch((err) => {
+  console.error("Error validating files:", err);
+  process.exit(1);
+});
+
+async function run() {
   const lspProcess = cp.spawn(serverPath, ["--stdio"], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -150,7 +153,7 @@ async function run(
     // Return workspace folders your client is aware of
     return [
       {
-        uri: `file://${process.cwd()}`,
+        uri: `file://${cwd}`,
         name: "root",
       },
     ];
@@ -172,11 +175,11 @@ async function run(
     },
   });
 
-  const workspaceFolders = [{ uri: toFileUri(process.cwd()), name: "root" }];
+  const workspaceFolders = [{ uri: toFileUri(cwd), name: "root" }];
 
   await connection.sendRequest("initialize", {
     processId: process.pid,
-    rootUri: `file://${process.cwd()}`,
+    rootUri: toFileUri(cwd),
     capabilities: {},
     workspaceFolders,
   });
@@ -201,7 +204,7 @@ async function run(
     const text = fs.readFileSync(filePath, "utf8");
 
     const textDocument: TextDocumentItem = {
-      uri: `file://${filePath}`,
+      uri: toFileUri(filePath),
       languageId: "devicetree",
       version: 0,
       text,
