@@ -68,7 +68,24 @@ const schema = z.object({
 });
 type SchemaType = z.infer<typeof schema>;
 
-const helpString = "Help TODO";
+const helpString = `Usage: dts-linter [options]
+
+Options:
+  --files                           List of input files (can be repeated).
+  --cwd <path>                      Set the current working directory.
+  --includes                        Paths (absolute or relative to CWD) to resolve includes (default: []).
+  --bindings                        Zephyr binding root directories (default: []).
+  --logLevel <none|verbose>         Set the logging verbosity (default: none).
+  --format                          Format the files specified in --files (default: false).
+  --formatFixAll                    Apply formatting changes directly to the files (default: false).
+  --processIncludes                 Process includes for formatting or diagnostics (default: false).
+  --diagnostics                     Show basic syntax diagnostics for files (default: false).
+  --diagnosticsFull                 Show full diagnostics for files (default: false).
+  --outFile <path>                  Write formatting diff output to this file (optional).
+  --help                            Show help information (default: false).
+
+Example:
+  dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
 
 let argv: SchemaType;
 try {
