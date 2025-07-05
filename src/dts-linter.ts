@@ -252,14 +252,15 @@ async function run() {
       await Promise.all(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
+          const indent = progressString(mainFile, j);
 
-          await formatFile(
-            connection,
-            f,
-            mainFile,
-            progressString(mainFile, j),
-            context
-          );
+          try {
+            await formatFile(connection, f, mainFile, indent, context);
+          } catch (e) {
+            console.log(`${grpStart()}${indent} ❌ Error formating ${f}`);
+            console.log(e instanceof Error ? e.message : JSON.stringify(e));
+            console.log(grpEnd());
+          }
 
           completedPaths.add(f);
         })
