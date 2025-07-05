@@ -107,7 +107,7 @@ if (argv.help) {
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
 const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
-  resolve(f, cwd)
+  resolve(cwd, f)
 );
 const includesPaths = argv.includes;
 const bindings = argv.bindings;
