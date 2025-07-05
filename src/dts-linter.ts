@@ -101,13 +101,9 @@ const diagnostics = argv.diagnostics;
 const parseIncludes = argv.parseIncludes;
 const outFile = argv.outFile;
 
-run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
-  console.error("Error validating files:", err);
-  process.exit(1);
-});
 
 let i = 0;
-let total = files.length;
+let total = filePaths.length;
 const diffs = new Map<string, string>();
 let formattingErrors: { file: string; context: ContextListItem }[] = [];
 let diagnosticIssues: {
