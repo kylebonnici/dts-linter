@@ -143,11 +143,13 @@ let i = 0;
 let total = filePaths.length;
 const diffs = new Map<string, string>();
 let formattingErrors: { file: string; context: ContextListItem }[] = [];
-let diagnosticIssues: {
-  file: string;
-  message: string;
-  context: ContextListItem;
-}[] = [];
+let diagnosticIssues = new Map<
+  string,
+  {
+    message: string;
+    context: ContextListItem;
+  }[]
+>();
 
 run().catch((err) => {
   console.error("Error validating files:", err);
@@ -299,8 +301,10 @@ async function run() {
               progressString(mainFile, j)
             );
             if (issues?.length) {
-              diagnosticIssues.push({
-                file: f,
+              if (!diagnosticIssues.has(f)) {
+                diagnosticIssues.set(f, []);
+              }
+              diagnosticIssues.get(f)?.push({
                 context,
                 message: issues
                   .map(
@@ -371,21 +375,22 @@ async function run() {
 
   if (diagnostics) {
     console.log("Diagnostic issues summary");
-    if (diagnosticIssues.length) {
+    if (diagnosticIssues.size) {
       console.log(
-        diagnosticIssues
-          .map(
-            (issue) =>
-              `${grpStart()}File: ${issue.file}\n\tBoard File: ${
-                issue.context.mainDtsPath.file
-              }\n\tIssues:\n\t\t${issue.message}\n${grpEnd()}`
+        Array.from(diagnosticIssues.entries())
+          .flatMap(
+            ([k, vs]) =>
+              `${grpStart()}File: ${k}\n\t${vs
+                .flatMap(
+                  (v) =>
+                    `Board File: ${v.context.mainDtsPath.file}\n\tIssues:\n\t\t${v.message}`
+                )
+                .join("\n\t")}\n${grpEnd()}`
           )
           .join("\n")
       );
       console.log(
-        `\n❌ ${
-          Array.from(diagnosticIssues.values()).map((v) => v.file).length
-        } of ${completedPaths.size} Failed diagnostic checks`
+        `\n❌ ${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
       );
     }
 
@@ -397,7 +402,7 @@ async function run() {
 
     if (
       processedDiagnosticChecks.size === completedPaths.size &&
-      !diagnosticIssues.length
+      !diagnosticIssues.size
     ) {
       console.log(`✅ All files passed diagnostic checks`);
     }
