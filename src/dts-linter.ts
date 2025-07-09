@@ -109,7 +109,7 @@ try {
 
   const safeParseData = schema.safeParse(values);
   if (!safeParseData.success) {
-    console.error("❌ Invalid CLI input:\n", safeParseData.error.format());
+    console.log(helpString);
     process.exit(1);
   }
   argv = safeParseData.data;
