@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import { applyPatch } from "diff";
+import { applyPatch, diffChars, parsePatch } from "diff";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -51,6 +51,51 @@ const onGit = isGitCI();
 
 const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
+const info = () => (onGit ? "::notice" : "✅");
+const warn = () => (onGit ? "::warning" : "⚠️");
+const error = () => (onGit ? "::error" : "❌");
+const file = (file: string) => (onGit ? `file=${file}` : file);
+const title = (title: string, message?: string) =>
+  onGit
+    ? `title=${title}${message ? `::${message}` : ""}`
+    : `${title}: ${message ? message : ""}`;
+const startMsg = (line: number, col?: number) =>
+  onGit
+    ? `line=${line}${col ? `,col=${col}` : ""}`
+    : `line: ${line} ${col ? `col=${col}` : ""}`;
+const endMsg = (line: number, col?: number) =>
+  onGit
+    ? `endLine=${line}${col ? `,endColumn=${col}` : ""}`
+    : `endLine: ${line} ${col ? `endColumn=${col}` : ""}`;
+
+const joinStr = onGit ? "," : " ";
+
+const log = (
+  level: "info" | "warn" | "error",
+  fileName?: string,
+  titleStr?: string,
+  message?: string,
+  start?: {
+    col?: number;
+    line: number;
+  },
+  end?: {
+    col?: number;
+    line: number;
+  }
+) => {
+  const s = start ? `line` : "";
+  return `${
+    level === "info" ? info() : level === "error" ? error() : warn()
+  } ${[
+    fileName ? file(fileName) : undefined,
+    titleStr ? title(titleStr, message) : undefined,
+    start ? startMsg(start.line, start.col) : undefined,
+    end ? endMsg(end.line, end.col) : undefined,
+  ]
+    .filter((v) => !!v)
+    .join(joinStr)}`;
+};
 
 const schema = z.object({
   files: z.array(z.string().optional()),
@@ -279,7 +324,9 @@ async function run() {
           try {
             await formatFile(connection, f, mainFile, indent, context);
           } catch (e) {
-            console.log(`${grpStart()}${indent} ❌ Error formating ${f}`);
+            console.log(
+              `${grpStart()}${indent} ${log("error", f, "Formatting")}`
+            );
             console.log(e instanceof Error ? e.message : JSON.stringify(e));
             console.log(grpEnd());
           }
@@ -319,10 +366,12 @@ async function run() {
           } else {
             skippeddDiagnosticChecks.add(f);
             console.log(
-              `${mainFile ? "" : "\t"}${progressString(
-                mainFile,
-                j
-              )} ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+              `${mainFile ? "" : "\t"}${progressString(mainFile, j)} ${log(
+                "warn",
+                f,
+                "Diagnostics",
+                "Check can only be done on full context!"
+              )}`
             );
           }
 
@@ -350,7 +399,14 @@ async function run() {
               diffApplied.add(f);
               fs.writeFileSync(f, result, "utf8");
             } else {
-              console.log(`❌ Failed to apply changes to ${f}`);
+              console.log(
+                `${log(
+                  "error",
+                  f,
+                  "Formatting",
+                  "Failed to apply changes to file"
+                )}`
+              );
             }
           }
         });
@@ -368,9 +424,14 @@ async function run() {
   if (format) {
     if (formattingErrors.length)
       console.log(
-        `❌ ${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+        `${log(
+          "error",
+          undefined,
+          "Formatting",
+          `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+        )}`
       );
-    else console.log(`✅ All files passed formatting`);
+    else console.log(`${info()} All files passed formatting`);
   }
 
   if (diagnostics) {
@@ -390,13 +451,23 @@ async function run() {
           .join("\n")
       );
       console.log(
-        `\n❌ ${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+        `\n${log(
+          "error",
+          undefined,
+          "Diagnostics",
+          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+        )}`
       );
     }
 
     if (skippeddDiagnosticChecks.size) {
       console.log(
-        `⚠️ ${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+        `${log(
+          "warn",
+          undefined,
+          "Diagnostics",
+          `${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+        )}`
       );
     }
 
@@ -404,7 +475,7 @@ async function run() {
       processedDiagnosticChecks.size === completedPaths.size &&
       !diagnosticIssues.size
     ) {
-      console.log(`✅ All files passed diagnostic checks`);
+      console.log(`${info()} All files passed diagnostic checks`);
     }
   }
 
@@ -442,13 +513,23 @@ const formatFile = async (
 
   if (diff) {
     console.log(
-      `${grpStart()}${indent}${progressString} ❌ ${absPath} is not correctly formatted.`
+      `${grpStart()}${indent}${progressString} ${log(
+        "error",
+        absPath,
+        "Formating",
+        "not correctly formatted."
+      )}`
     );
 
     if (diffs.has(absPath)) {
       if (diffs.get(absPath) !== diff && outFile) {
         console.log(
-          `${indent} ⚠️ Multiple diffs for the same file. This diff will not be in the generated file!`
+          `${indent} ${log(
+            "warn",
+            absPath,
+            "Conflicting Diff",
+            "Multiple diffs for the same file. This diff will not be in the generated file!"
+          )}`
         );
       }
     } else {
@@ -459,16 +540,155 @@ const formatFile = async (
       diffs.set(absPath, diff);
     }
 
-    console.log(diff);
+    getDetailedPatchMessages(diff).forEach((d) => {
+      console.log(
+        `${indent}${progressString} ${log(
+          "error",
+          absPath,
+          "Fix",
+          d.replacement.replaceAll("\t", "\\t").replaceAll("\n", "\\n"),
+          {
+            line: d.lineStart,
+            col: d.colStart,
+          },
+          {
+            line: d.lineEnd,
+            col: d.colEnd,
+          }
+        )}`
+      );
+    });
+
     console.log(grpEnd());
 
     return diff;
   } else {
     console.log(
-      `${indent}${progressString} ✅ ${absPath} is correctly formatted.`
+      `${indent}${progressString} ${log(
+        "info",
+        absPath,
+        "Formaing",
+        "Correctly formatted"
+      )}`
     );
   }
 };
+
+interface DiffMessage {
+  lineStart: number;
+  colStart: number;
+  lineEnd: number;
+  colEnd: number;
+  replacement: string;
+}
+
+function getDetailedPatchMessages(patchText: string): DiffMessage[] {
+  const parsed = parsePatch(patchText);
+  const messages: DiffMessage[] = [];
+
+  for (const file of parsed) {
+    for (const hunk of file.hunks) {
+      let oldLine = hunk.oldStart;
+      let newLine = hunk.newStart;
+
+      let buffer: {
+        oldLines: string[];
+        newLines: string[];
+        line: number;
+      } | null = null;
+
+      const flushBuffer = () => {
+        if (!buffer) return;
+
+        const { oldLines, newLines, line } = buffer;
+
+        // Handle line-by-line diffs
+        if (oldLines.length === 1 && newLines.length === 1) {
+          const oldText = oldLines[0];
+          const newText = newLines[0];
+
+          const diffs = diffChars(oldText, newText);
+          let col = 1;
+          for (const part of diffs) {
+            if (part.added) {
+              messages.push({
+                lineStart: line,
+                colStart: col,
+                lineEnd: line,
+                colEnd: col,
+                replacement: part.value,
+              });
+            } else if (part.removed) {
+              const colStart = col;
+              col += part.value.length;
+              messages.push({
+                lineStart: line,
+                colStart,
+                lineEnd: line,
+                colEnd: col,
+                replacement: "",
+              });
+            } else {
+              col += part.value.length;
+            }
+          }
+        } else if (oldLines.length && newLines.length) {
+          // Multi-line replace
+          messages.push({
+            lineStart: line,
+            colStart: 1,
+            lineEnd: line + oldLines.length - 1,
+            colEnd: oldLines[oldLines.length - 1].length + 1,
+            replacement: newLines.join("\n"),
+          });
+        } else if (oldLines.length) {
+          // Delete
+          messages.push({
+            lineStart: line,
+            colStart: 1,
+            lineEnd: line + oldLines.length - 1,
+            colEnd: oldLines[oldLines.length - 1].length + 1,
+            replacement: "",
+          });
+        } else if (newLines.length) {
+          // Insert
+          messages.push({
+            lineStart: line,
+            colStart: 1,
+            lineEnd: line,
+            colEnd: 1,
+            replacement: newLines.join("\n"),
+          });
+        }
+
+        buffer = null;
+      };
+
+      for (const line of hunk.lines) {
+        const type = line[0];
+        const content = line.slice(1);
+
+        if (type === " ") {
+          flushBuffer();
+          oldLine++;
+          newLine++;
+        } else if (type === "-") {
+          if (!buffer) buffer = { oldLines: [], newLines: [], line: oldLine };
+          buffer.oldLines.push(content);
+          oldLine++;
+        } else if (type === "+") {
+          if (!buffer) buffer = { oldLines: [], newLines: [], line: newLine };
+          buffer.newLines.push(content);
+          newLine++;
+        }
+      }
+
+      flushBuffer();
+    }
+  }
+
+  return messages;
+}
 
 let processedDiagnosticChecks = new Set<string>();
 let skippeddDiagnosticChecks = new Set<string>();
@@ -494,18 +714,32 @@ const fileDiagnosticIssues = async (
 
   if (issues.length) {
     console.log(
-      `${grpStart()}${indent}${progressString} ❌ ${absPath} has ${
-        issues.length
-      } diagnostic errors!`
+      `${grpStart()}${indent}${progressString} ${log(
+        "error",
+        absPath,
+        "Diagnostic errors",
+        `${issues.length} diagnostic errors!`
+      )}`
     );
 
     console.log(
       issues
         .map(
           (issue) =>
-            `${indent}\t${issue.message}: ${JSON.stringify(
-              issue.range.start
-            )}${JSON.stringify(issue.range.end)}`
+            `${indent}\t${log(
+              "error",
+              absPath,
+              "Diagnostic error",
+              issue.message,
+              {
+                line: issue.range.start.line,
+                col: issue.range.start.character,
+              },
+              {
+                line: issue.range.end.line,
+                col: issue.range.end.character,
+              }
+            )}`
         )
         .join("\n")
     );
@@ -514,7 +748,12 @@ const fileDiagnosticIssues = async (
     return issues;
   } else {
     console.log(
-      `${indent}${progressString} ✅ ${absPath} has no diagnostic errors.`
+      `${indent}${progressString} ${log(
+        "info",
+        absPath,
+        "Diagnostic",
+        "No diagnostic errors"
+      )}`
     );
   }
 };
