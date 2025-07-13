@@ -82,16 +82,17 @@ const log = (
   end?: {
     col?: number;
     line: number;
-  }
+  },
+  indent?: string
 ) => {
   const s = start ? `line` : "";
-  return `${
+  return `${isGitCI() ? "" : indent}${
     level === "info" ? info() : level === "error" ? error() : warn()
   } ${[
     fileName ? file(fileName) : undefined,
-    titleStr ? title(titleStr, message) : undefined,
     start ? startMsg(start.line, start.col) : undefined,
     end ? endMsg(end.line, end.col) : undefined,
+    titleStr ? title(titleStr, message) : undefined,
   ]
     .filter((v) => !!v)
     .join(joinStr)}`;
@@ -325,7 +326,15 @@ async function run() {
             await formatFile(connection, f, mainFile, indent, context);
           } catch (e) {
             console.log(
-              `${grpStart()}${indent} ${log("error", f, "Formatting")}`
+              `${grpStart()}${log(
+                "error",
+                f,
+                "Formatting",
+                (e as Error)?.message,
+                undefined,
+                undefined,
+                indent
+              )}`
             );
             console.log(e instanceof Error ? e.message : JSON.stringify(e));
             console.log(grpEnd());
@@ -366,11 +375,14 @@ async function run() {
           } else {
             skippeddDiagnosticChecks.add(f);
             console.log(
-              `${mainFile ? "" : "\t"}${progressString(mainFile, j)} ${log(
+              `${log(
                 "warn",
                 f,
                 "Diagnostics",
-                "Check can only be done on full context!"
+                "Check can only be done on full context!",
+                undefined,
+                undefined,
+                `${mainFile ? "" : "\t"}${progressString(mainFile, j)} `
               )}`
             );
           }
@@ -422,7 +434,7 @@ async function run() {
   lspProcess.kill();
 
   if (format) {
-    if (formattingErrors.length)
+    if (formattingErrors.length && !isGitCI())
       console.log(
         `${log(
           "error",
@@ -450,17 +462,19 @@ async function run() {
           )
           .join("\n")
       );
-      console.log(
-        `\n${log(
-          "error",
-          undefined,
-          "Diagnostics",
-          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
-        )}`
-      );
+      if (!isGitCI()) {
+        console.log(
+          `\n${log(
+            "error",
+            undefined,
+            "Diagnostics",
+            `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+          )}`
+        );
+      }
     }
 
-    if (skippeddDiagnosticChecks.size) {
+    if (skippeddDiagnosticChecks.size && !isGitCI()) {
       console.log(
         `${log(
           "warn",
@@ -513,11 +527,14 @@ const formatFile = async (
 
   if (diff) {
     console.log(
-      `${grpStart()}${indent}${progressString} ${log(
+      `${grpStart()}${log(
         "error",
         absPath,
         "Formating",
-        "not correctly formatted."
+        "not correctly formatted.",
+        undefined,
+        undefined,
+        `${indent}${progressString} `
       )}`
     );
 
@@ -542,11 +559,13 @@ const formatFile = async (
 
     getDetailedPatchMessages(diff).forEach((d) => {
       console.log(
-        `${indent}${progressString} ${log(
+        `${log(
           "error",
           absPath,
           "Fix",
-          d.replacement.replaceAll("\t", "\\t").replaceAll("\n", "\\n"),
+          `Replace with: ${d.replacement
+            .replaceAll("\t", "\\t")
+            .replaceAll("\n", "\\n")}`,
           {
             line: d.lineStart,
             col: d.colStart,
@@ -554,7 +573,8 @@ const formatFile = async (
           {
             line: d.lineEnd,
             col: d.colEnd,
-          }
+          },
+          `${indent}${progressString} `
         )}`
       );
     });
@@ -564,11 +584,14 @@ const formatFile = async (
     return diff;
   } else {
     console.log(
-      `${indent}${progressString} ${log(
+      `${log(
         "info",
         absPath,
         "Formaing",
-        "Correctly formatted"
+        "Correctly formatted",
+        undefined,
+        undefined,
+        `${indent}${progressString} `
       )}`
     );
   }
@@ -714,11 +737,14 @@ const fileDiagnosticIssues = async (
 
   if (issues.length) {
     console.log(
-      `${grpStart()}${indent}${progressString} ${log(
+      `${grpStart()}${log(
         "error",
         absPath,
         "Diagnostic errors",
-        `${issues.length} diagnostic errors!`
+        `${issues.length} diagnostic errors!`,
+        undefined,
+        undefined,
+        `${indent}${progressString} `
       )}`
     );
 
@@ -748,11 +774,14 @@ const fileDiagnosticIssues = async (
     return issues;
   } else {
     console.log(
-      `${indent}${progressString} ${log(
+      `${log(
         "info",
         absPath,
         "Diagnostic",
-        "No diagnostic errors"
+        "No diagnostic errors",
+        undefined,
+        undefined,
+        `${indent}${progressString} `
       )}`
     );
   }
