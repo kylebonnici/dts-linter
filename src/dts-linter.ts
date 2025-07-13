@@ -15,8 +15,9 @@ import {
 
 import { z } from "zod";
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { applyPatch, diffChars, parsePatch } from "diff";
+import * as core from "@actions/core";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -54,8 +55,9 @@ const grpEnd = () => (onGit ? "::endgroup::" : "");
 const info = () => (onGit ? "::notice" : "✅");
 const warn = () => (onGit ? "::warning" : "⚠️");
 const error = () => (onGit ? "::error" : "❌");
-const file = (file: string) => (onGit ? `file=${file}` : file);
-const title = (title: string, message?: string) =>
+const file = (file: string) =>
+  onGit ? `file=${relative(cwd, file)}` : relative(cwd, file);
+const title = (title?: string, message?: string) =>
   onGit
     ? `title=${title}${message ? `::${message}` : ""}`
     : `${title}: ${message ? message : ""}`;
@@ -71,10 +73,11 @@ const endMsg = (line: number, col?: number) =>
 const joinStr = onGit ? "," : " ";
 
 const log = (
-  level: "info" | "warn" | "error",
+  level: "warn" | "error" | "info",
+  message: string,
   fileName?: string,
   titleStr?: string,
-  message?: string,
+
   start?: {
     col?: number;
     line: number;
@@ -85,17 +88,38 @@ const log = (
   },
   indent?: string
 ) => {
-  const s = start ? `line` : "";
-  return `${isGitCI() ? "" : indent}${
-    level === "info" ? info() : level === "error" ? error() : warn()
-  } ${[
-    fileName ? file(fileName) : undefined,
-    start ? startMsg(start.line, start.col) : undefined,
-    end ? endMsg(end.line, end.col) : undefined,
-    titleStr ? title(titleStr, message) : undefined,
-  ]
-    .filter((v) => !!v)
-    .join(joinStr)}`;
+  if (isGitCI()) {
+    if (level === "info") {
+      core.info(message);
+    } else {
+      const action = level === "error" ? core.error : core.warning;
+      action(message, {
+        file: fileName ? relative(cwd, fileName) : undefined,
+        startLine: start?.line,
+        startColumn: start?.col,
+        endLine: end?.line,
+        endColumn: end?.col,
+        title: titleStr,
+      });
+    }
+    return;
+  }
+  if (level === "info") {
+    console.log(`${indent ?? ""}${info()} ${message}`);
+    return;
+  }
+  console.log(
+    `${indent ?? ""}${
+      level === "error" ? error() : level === "warn" ? warn() : info()
+    } ${[
+      fileName ? file(fileName) : undefined,
+      start ? startMsg(start.line, start.col) : undefined,
+      end ? endMsg(end.line, end.col) : undefined,
+      message,
+    ]
+      .filter((v) => !!v)
+      .join(joinStr)}`
+  );
 };
 
 const schema = z.object({
@@ -325,19 +349,17 @@ async function run() {
           try {
             await formatFile(connection, f, mainFile, indent, context);
           } catch (e) {
-            console.log(
-              `${grpStart()}${log(
+            if (!diagnostics) {
+              log(
                 "error",
-                f,
-                "Formatting",
                 (e as Error)?.message,
+                f,
+                undefined,
                 undefined,
                 undefined,
                 indent
-              )}`
-            );
-            console.log(e instanceof Error ? e.message : JSON.stringify(e));
-            console.log(grpEnd());
+              );
+            }
           }
 
           completedPaths.add(f);
@@ -374,16 +396,14 @@ async function run() {
             }
           } else {
             skippeddDiagnosticChecks.add(f);
-            console.log(
-              `${log(
-                "warn",
-                f,
-                "Diagnostics",
-                "Check can only be done on full context!",
-                undefined,
-                undefined,
-                `${mainFile ? "" : "\t"}${progressString(mainFile, j)} `
-              )}`
+            log(
+              "warn",
+              "Check can only be done on full context!",
+              f,
+              undefined,
+              undefined,
+              undefined,
+              `${mainFile ? "" : "\t"}${progressString(mainFile, j)} `
             );
           }
 
@@ -411,14 +431,7 @@ async function run() {
               diffApplied.add(f);
               fs.writeFileSync(f, result, "utf8");
             } else {
-              console.log(
-                `${log(
-                  "error",
-                  f,
-                  "Formatting",
-                  "Failed to apply changes to file"
-                )}`
-              );
+              log("error", "Failed to apply changes to file", f);
             }
           }
         });
@@ -429,67 +442,59 @@ async function run() {
     fs.writeFileSync(outFile, Array.from(diffs.values()).join("\n\n"));
   }
 
-  console.log("Processed", completedPaths.size, "files");
+  log("info", `Processed ${completedPaths.size} files`);
   connection.dispose();
   lspProcess.kill();
 
-  if (format) {
-    if (formattingErrors.length && !isGitCI())
-      console.log(
-        `${log(
-          "error",
-          undefined,
-          "Formatting",
-          `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
-        )}`
+  if (format && !isGitCI()) {
+    if (formattingErrors.length)
+      log(
+        "error",
+        `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
       );
-    else console.log(`${info()} All files passed formatting`);
+    else log("info", `All files passed formatting`);
   }
 
   if (diagnostics) {
-    console.log("Diagnostic issues summary");
-    if (diagnosticIssues.size) {
-      console.log(
-        Array.from(diagnosticIssues.entries())
-          .flatMap(
-            ([k, vs]) =>
-              `${grpStart()}File: ${k}\n\t${vs
-                .flatMap(
-                  (v) =>
-                    `Board File: ${v.context.mainDtsPath.file}\n\tIssues:\n\t\t${v.message}`
-                )
-                .join("\n\t")}\n${grpEnd()}`
-          )
-          .join("\n")
-      );
-      if (!isGitCI()) {
+    if (!isGitCI()) {
+      console.log("Diagnostic issues summary");
+      if (diagnosticIssues.size) {
         console.log(
-          `\n${log(
-            "error",
-            undefined,
-            "Diagnostics",
-            `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
-          )}`
+          Array.from(diagnosticIssues.entries())
+            .flatMap(
+              ([k, vs]) =>
+                `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
+                  .flatMap(
+                    (v) =>
+                      `Board File: ${relative(
+                        cwd,
+                        v.context.mainDtsPath.file
+                      )}\n\tIssues:\n\t\t${v.message}`
+                  )
+                  .join("\n\t")}\n${grpEnd()}`
+            )
+            .join("\n")
+        );
+
+        log(
+          "error",
+          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
         );
       }
-    }
 
-    if (skippeddDiagnosticChecks.size && !isGitCI()) {
-      console.log(
-        `${log(
+      if (skippeddDiagnosticChecks.size) {
+        log(
           "warn",
-          undefined,
-          "Diagnostics",
           `${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
-        )}`
-      );
+        );
+      }
     }
 
     if (
       processedDiagnosticChecks.size === completedPaths.size &&
       !diagnosticIssues.size
     ) {
-      console.log(`${info()} All files passed diagnostic checks`);
+      log("info", "All files passed diagnostic checks");
     }
   }
 
@@ -526,27 +531,26 @@ const formatFile = async (
   const indent = mainFile ? "" : "\t";
 
   if (diff) {
-    console.log(
-      `${grpStart()}${log(
-        "error",
-        absPath,
-        "Formating",
-        "not correctly formatted.",
-        undefined,
-        undefined,
-        `${indent}${progressString} `
-      )}`
+    log(
+      "error",
+      diff,
+      absPath,
+      "Not correctly formatted.",
+      undefined,
+      undefined,
+      `${indent}${progressString} `
     );
 
     if (diffs.has(absPath)) {
       if (diffs.get(absPath) !== diff && outFile) {
-        console.log(
-          `${indent} ${log(
-            "warn",
-            absPath,
-            "Conflicting Diff",
-            "Multiple diffs for the same file. This diff will not be in the generated file!"
-          )}`
+        log(
+          "warn",
+          "Multiple diffs for the same file. This diff will not be in the generated file!",
+          absPath,
+          undefined,
+          undefined,
+          undefined,
+          `${indent} `
         );
       }
     } else {
@@ -557,53 +561,44 @@ const formatFile = async (
       diffs.set(absPath, diff);
     }
 
-    getDetailedPatchMessages(diff).forEach((d) => {
-      console.log(
-        `${log(
-          "error",
-          absPath,
-          "Fix",
-          `Replace with: ${d.replacement
-            .replaceAll("\t", "\\t")
-            .replaceAll("\n", "\\n")}`,
-          {
-            line: d.lineStart,
-            col: d.colStart,
-          },
-          {
-            line: d.lineEnd,
-            col: d.colEnd,
-          },
-          `${indent}${progressString} `
-        )}`
-      );
-    });
-
-    console.log(grpEnd());
+    // getDetailedPatchMessages(diff).forEach((d) => {
+    //   log(
+    //     "error",
+    //     `${d.description.replaceAll("\t", "\\t").replaceAll("\n", "\\n")}`,
+    //     absPath,
+    //     undefined,
+    //     {
+    //       line: d.lineStart,
+    //       col: d.colStart,
+    //     },
+    //     {
+    //       line: d.lineEnd,
+    //       col: d.colEnd,
+    //     },
+    //     `${indent}${progressString} `
+    //   );
+    // });
 
     return diff;
   } else {
-    console.log(
-      `${log(
-        "info",
-        absPath,
-        "Formaing",
-        "Correctly formatted",
-        undefined,
-        undefined,
-        `${indent}${progressString} `
-      )}`
+    log(
+      "info",
+      `${indent}${progressString} ${relative(
+        cwd,
+        absPath
+      )} is correctly formatted`
     );
   }
 };
 
-interface DiffMessage {
+type DiffMessage = {
   lineStart: number;
   colStart: number;
   lineEnd: number;
   colEnd: number;
   replacement: string;
-}
+  description: string;
+};
 
 function getDetailedPatchMessages(patchText: string): DiffMessage[] {
   const parsed = parsePatch(patchText);
@@ -618,14 +613,15 @@ function getDetailedPatchMessages(patchText: string): DiffMessage[] {
         oldLines: string[];
         newLines: string[];
         line: number;
+        oldLineStart: number;
+        newLineStart: number;
       } | null = null;
 
       const flushBuffer = () => {
         if (!buffer) return;
 
-        const { oldLines, newLines, line } = buffer;
+        const { oldLines, newLines, line, oldLineStart, newLineStart } = buffer;
 
-        // Handle line-by-line diffs
         if (oldLines.length === 1 && newLines.length === 1) {
           const oldText = oldLines[0];
           const newText = newLines[0];
@@ -640,6 +636,7 @@ function getDetailedPatchMessages(patchText: string): DiffMessage[] {
                 lineEnd: line,
                 colEnd: col,
                 replacement: part.value,
+                description: `Insert '${part.value}'`,
               });
             } else if (part.removed) {
               const colStart = col;
@@ -650,6 +647,7 @@ function getDetailedPatchMessages(patchText: string): DiffMessage[] {
                 lineEnd: line,
                 colEnd: col,
                 replacement: "",
+                description: `Remove '${part.value}'`,
               });
             } else {
               col += part.value.length;
@@ -657,30 +655,46 @@ function getDetailedPatchMessages(patchText: string): DiffMessage[] {
           }
         } else if (oldLines.length && newLines.length) {
           // Multi-line replace
+          const visibleOld = oldLines.join("\\n");
+          const visibleNew = newLines.join("\\n");
+
           messages.push({
-            lineStart: line,
+            lineStart: oldLineStart,
             colStart: 1,
-            lineEnd: line + oldLines.length - 1,
+            lineEnd: oldLineStart + oldLines.length - 1,
             colEnd: oldLines[oldLines.length - 1].length + 1,
             replacement: newLines.join("\n"),
+            description: `Replace '${visibleOld}' with '${visibleNew}'`,
           });
         } else if (oldLines.length) {
           // Delete
+          const isAllEmpty = oldLines.every((line) => line.trim() === "");
+          const visibleOld = isAllEmpty
+            ? "\\n".repeat(oldLines.length)
+            : oldLines.join("\\n");
+
           messages.push({
-            lineStart: line,
+            lineStart: oldLineStart,
             colStart: 1,
-            lineEnd: line + oldLines.length - 1,
-            colEnd: oldLines[oldLines.length - 1].length + 1,
+            lineEnd: oldLineStart + oldLines.length - 1,
+            colEnd: Math.max(oldLines[oldLines.length - 1].length + 1, 1),
             replacement: "",
+            description: `Remove '${visibleOld}'`,
           });
         } else if (newLines.length) {
           // Insert
+          const isAllEmpty = newLines.every((line) => line.trim() === "");
+          const visibleNew = isAllEmpty
+            ? "\\n".repeat(newLines.length)
+            : newLines.join("\\n");
+
           messages.push({
-            lineStart: line,
+            lineStart: newLineStart,
             colStart: 1,
-            lineEnd: line,
+            lineEnd: newLineStart + newLines.length - 1,
             colEnd: 1,
             replacement: newLines.join("\n"),
+            description: `Insert '${visibleNew}'`,
           });
         }
 
@@ -696,11 +710,25 @@ function getDetailedPatchMessages(patchText: string): DiffMessage[] {
           oldLine++;
           newLine++;
         } else if (type === "-") {
-          if (!buffer) buffer = { oldLines: [], newLines: [], line: oldLine };
+          if (!buffer)
+            buffer = {
+              oldLines: [],
+              newLines: [],
+              line: oldLine,
+              oldLineStart: oldLine,
+              newLineStart: newLine,
+            };
           buffer.oldLines.push(content);
           oldLine++;
         } else if (type === "+") {
-          if (!buffer) buffer = { oldLines: [], newLines: [], line: newLine };
+          if (!buffer)
+            buffer = {
+              oldLines: [],
+              newLines: [],
+              line: newLine,
+              oldLineStart: oldLine,
+              newLineStart: newLine,
+            };
           buffer.newLines.push(content);
           newLine++;
         }
@@ -736,52 +764,35 @@ const fileDiagnosticIssues = async (
   const indent = mainFile ? "" : "\t";
 
   if (issues.length) {
-    console.log(
-      `${grpStart()}${log(
-        "error",
+    issues.forEach((issue) =>
+      log(
+        issue.severity === DiagnosticSeverity.Error
+          ? "error"
+          : issue.severity === DiagnosticSeverity.Warning
+          ? "warn"
+          : "info",
+        issue.message,
         absPath,
-        "Diagnostic errors",
-        `${issues.length} diagnostic errors!`,
         undefined,
-        undefined,
-        `${indent}${progressString} `
-      )}`
+        {
+          line: issue.range.start.line + 1,
+          col: issue.range.start.character,
+        },
+        {
+          line: issue.range.end.line + 1,
+          col: issue.range.end.character,
+        },
+        `${indent}\t`
+      )
     );
-
-    console.log(
-      issues
-        .map(
-          (issue) =>
-            `${indent}\t${log(
-              "error",
-              absPath,
-              "Diagnostic error",
-              issue.message,
-              {
-                line: issue.range.start.line,
-                col: issue.range.start.character,
-              },
-              {
-                line: issue.range.end.line,
-                col: issue.range.end.character,
-              }
-            )}`
-        )
-        .join("\n")
-    );
-    console.log(grpEnd());
 
     return issues;
   } else {
-    console.log(
-      `${log(
-        "info",
-        absPath,
-        "Diagnostic",
-        "No diagnostic errors",
-        undefined,
-        undefined,
-        `${indent}${progressString} `
+    log(
+      "info",
+      `${indent}${progressString} No diagnostic errors in ${relative(
+        cwd,
+        absPath
       )}`
     );
   }
