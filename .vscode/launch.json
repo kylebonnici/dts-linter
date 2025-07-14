@@ -12,8 +12,9 @@
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
         "--files",
-        "/Users/kylebonnici/workspace/personal/zephyr/boards/seeed/xiao_esp32s3/xiao_esp32s3_procpu.dts",
+        "/Users/kylebonnici/workspace/personal/zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts",
         "--format",
+        "--diagnostics",
         "--cwd",
         "/Users/kylebonnici/workspace/personal/zephyr"
       ],
