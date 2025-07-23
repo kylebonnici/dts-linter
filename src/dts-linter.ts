@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { relative, resolve } from "node:path";
-import { applyPatch, diffChars, parsePatch } from "diff";
+import { applyPatch } from "diff";
 import * as core from "@actions/core";
 
 const isDebugging = __dirname.endsWith("src");
@@ -57,10 +57,6 @@ const warn = () => (onGit ? "::warning" : "⚠️");
 const error = () => (onGit ? "::error" : "❌");
 const file = (file: string) =>
   onGit ? `file=${relative(cwd, file)}` : relative(cwd, file);
-const title = (title?: string, message?: string) =>
-  onGit
-    ? `title=${title}${message ? `::${message}` : ""}`
-    : `${title}: ${message ? message : ""}`;
 const startMsg = (line: number, col?: number) =>
   onGit
     ? `line=${line}${col ? `,col=${col}` : ""}`
@@ -86,7 +82,8 @@ const log = (
     col?: number;
     line: number;
   },
-  indent?: string
+  indent?: string,
+  progressString?: string
 ) => {
   if (isGitCI()) {
     if (level === "info") {
@@ -105,12 +102,12 @@ const log = (
     return;
   }
   if (level === "info") {
-    console.log(`${indent ?? ""}${info()} ${message}`);
+    console.log(`${info()} ${indent ?? ""}${progressString ?? ""} ${message}`);
     return;
   }
   console.log(
-    `${indent ?? ""}${
-      level === "error" ? error() : level === "warn" ? warn() : info()
+    `${level === "error" ? error() : warn()} ${indent ?? ""}${
+      progressString ?? ""
     } ${[
       fileName ? file(fileName) : undefined,
       start ? startMsg(start.line, start.col) : undefined,
@@ -133,6 +130,7 @@ const schema = z.object({
   processIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   diagnosticsFull: z.boolean().optional().default(false),
+  showInfoDiagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
   help: z.boolean().optional().default(false),
 });
@@ -151,6 +149,7 @@ Options:
   --processIncludes                 Process includes for formatting or diagnostics (default: false).
   --diagnostics                     Show basic syntax diagnostics for files (default: false).
   --diagnosticsFull                 Show full diagnostics for files (default: false).
+  --showInfoDiagnostics             Show informaiton diagnostics
   --outFile <path>                  Write formatting diff output to this file (optional).
   --help                            Show help information (default: false).
 
@@ -171,6 +170,7 @@ try {
       processIncludes: { type: "boolean" },
       diagnostics: { type: "boolean" },
       diagnosticsFull: { type: "boolean" },
+      showInfoDiagnostics: { type: "boolean" },
       outFile: { type: "string" },
       help: { type: "boolean" },
     },
@@ -205,7 +205,8 @@ const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
 const diagnosticsFull = argv.diagnosticsFull;
-const diagnostics = argv.diagnostics || diagnosticsFull;
+const diagnostics = argv.diagnostics || diagnosticsFull || format;
+const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes;
 const outFile = argv.outFile;
 
@@ -216,6 +217,7 @@ let formattingErrors: { file: string; context: ContextListItem }[] = [];
 let diagnosticIssues = new Map<
   string,
   {
+    maxSeverity: DiagnosticSeverity;
     message: string;
     context: ContextListItem;
   }[]
@@ -225,6 +227,21 @@ run().catch((err) => {
   console.error("Error validating files:", err);
   process.exit(1);
 });
+
+const diagnosticSeverityToString = (
+  severity: DiagnosticSeverity = DiagnosticSeverity.Hint
+): string => {
+  switch (severity) {
+    case DiagnosticSeverity.Error:
+      return "error";
+    case DiagnosticSeverity.Warning:
+      return "warn";
+    case DiagnosticSeverity.Information:
+      return "info";
+    case DiagnosticSeverity.Hint:
+      return "hint";
+  }
+};
 
 async function run() {
   const lspProcess = cp.spawn(serverPath, ["--stdio"], {
@@ -357,6 +374,7 @@ async function run() {
                 undefined,
                 undefined,
                 undefined,
+                undefined,
                 indent
               );
             }
@@ -383,13 +401,22 @@ async function run() {
                 diagnosticIssues.set(f, []);
               }
               diagnosticIssues.get(f)?.push({
+                maxSeverity: issues.reduce(
+                  (p, c) =>
+                    (c.severity ?? DiagnosticSeverity.Hint) < p
+                      ? c.severity ?? DiagnosticSeverity.Hint
+                      : p,
+                  DiagnosticSeverity.Hint as DiagnosticSeverity
+                ),
                 context,
                 message: issues
                   .map(
                     (issue) =>
-                      `${issue.message}: ${JSON.stringify(
-                        issue.range.start
-                      )}-${JSON.stringify(issue.range.end)}`
+                      `[${diagnosticSeverityToString(issue.severity)}] ${
+                        issue.message
+                      }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                        issue.range.end
+                      )}`
                   )
                   .join("\n\t\t"),
               });
@@ -403,7 +430,8 @@ async function run() {
               undefined,
               undefined,
               undefined,
-              `${mainFile ? "" : "\t"}${progressString(mainFile, j)} `
+              `${mainFile ? "" : "\t"}`,
+              progressString(mainFile, j)
             );
           }
 
@@ -490,15 +518,25 @@ async function run() {
       }
     }
 
+    const errOrWarn = Array.from(diagnosticIssues).filter((i) =>
+      i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning)
+    );
+    const hasWarnOrError = !!errOrWarn.length;
+
     if (
       processedDiagnosticChecks.size === completedPaths.size &&
-      !diagnosticIssues.size
+      !hasWarnOrError
     ) {
       log("info", "All files passed diagnostic checks");
+    } else {
+      log(
+        "error",
+        `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`
+      );
     }
   }
 
-  process.exit(formattingErrors.length || diagnosticIssues ? 1 : 0);
+  process.exit(formattingErrors.length || diagnosticIssues.size ? 1 : 0);
 }
 
 const flatFileTree = (file: File): string[] => {
@@ -538,7 +576,8 @@ const formatFile = async (
       "Not correctly formatted.",
       undefined,
       undefined,
-      `${indent}${progressString} `
+      indent,
+      progressString
     );
 
     if (diffs.has(absPath)) {
@@ -550,7 +589,8 @@ const formatFile = async (
           undefined,
           undefined,
           undefined,
-          `${indent} `
+          indent,
+          progressString
         );
       }
     } else {
@@ -565,10 +605,13 @@ const formatFile = async (
   } else {
     log(
       "info",
-      `${indent}${progressString} ${relative(
-        cwd,
-        absPath
-      )} is correctly formatted`
+      `${relative(cwd, absPath)} is correctly formatted`,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      indent,
+      progressString
     );
   }
 };
@@ -590,21 +633,22 @@ const fileDiagnosticIssues = async (
   ).filter(
     (issue) =>
       issue.severity === DiagnosticSeverity.Error ||
-      issue.severity === DiagnosticSeverity.Warning
+      issue.severity === DiagnosticSeverity.Warning ||
+      (issue.severity === DiagnosticSeverity.Information && showInfoDiagnostics)
   );
 
   const indent = mainFile ? "" : "\t";
 
   if (issues.length) {
-    issues.forEach((issue) =>
+    issues.forEach((issue, i) =>
       log(
         issue.severity === DiagnosticSeverity.Error
           ? "error"
           : issue.severity === DiagnosticSeverity.Warning
           ? "warn"
-          : "info",
+          : "warn",
         issue.message,
-        absPath,
+        onGit ? absPath : i ? "\t" : `${absPath}\n${indent}\t`,
         undefined,
         {
           line: issue.range.start.line + 1,
@@ -614,7 +658,8 @@ const fileDiagnosticIssues = async (
           line: issue.range.end.line + 1,
           col: issue.range.end.character,
         },
-        `${indent}\t`
+        indent,
+        i ? "" : progressString
       )
     );
 
@@ -622,10 +667,13 @@ const fileDiagnosticIssues = async (
   } else {
     log(
       "info",
-      `${indent}${progressString} No diagnostic errors in ${relative(
-        cwd,
-        absPath
-      )}`
+      `No diagnostic errors in ${relative(cwd, absPath)}`,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      indent,
+      progressString
     );
   }
 };
