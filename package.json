@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.0.0-beta24",
+  "version": "0.0.0-beta25",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -26,8 +26,8 @@
   "description": "",
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "devicetree-language-server": "^0.4.9",
-    "devicetree-language-server-types": "^0.0.2-alpha.7",
+    "devicetree-language-server": "^0.4.10",
+    "devicetree-language-server-types": "^0.0.2-alpha.8",
     "diff": "^8.0.2",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-textdocument": "^1.0.12",
