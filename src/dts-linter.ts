@@ -18,6 +18,7 @@ import { parseArgs } from "node:util";
 import { relative, resolve } from "node:path";
 import { applyPatch } from "diff";
 import * as core from "@actions/core";
+import { globSync } from "glob";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -120,7 +121,7 @@ const log = (
 };
 
 const schema = z.object({
-  files: z.array(z.string().optional()),
+  files: z.array(z.string().optional()).optional(),
   cwd: z.string().optional(),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
@@ -196,6 +197,13 @@ if (argv.help) {
 
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
+if (!argv.files) {
+  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${argv.cwd}`);
+  argv.files = globSync("**/*.{dts,dtsi,overlay}", {
+    cwd: argv.cwd,
+    nodir: true,
+  });
+}
 const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
   resolve(cwd, f)
 );
