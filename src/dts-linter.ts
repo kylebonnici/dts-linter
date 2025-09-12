@@ -15,6 +15,10 @@ import {
 
 import { z } from "zod";
 import { parseArgs } from "node:util";
+import { relative, resolve } from "node:path";
+import { applyPatch, createPatch } from "diff";
+import * as core from "@actions/core";
+import { globSync } from "glob";
 
 const isDebugging = __dirname.endsWith("src");
 const serverPath = isDebugging
@@ -49,70 +53,209 @@ const onGit = isGitCI();
 
 const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
+const info = () => (onGit ? "::notice" : "✅");
+const warn = () => (onGit ? "::warning" : "⚠️");
+const error = () => (onGit ? "::error" : "❌");
+const file = (file: string) =>
+  onGit ? `file=${relative(cwd, file)}` : relative(cwd, file);
+const startMsg = (line: number, col?: number) =>
+  onGit
+    ? `line=${line}${col ? `,col=${col}` : ""}`
+    : `line: ${line} ${col ? `col=${col}` : ""}`;
+const endMsg = (line: number, col?: number) =>
+  onGit
+    ? `endLine=${line}${col ? `,endColumn=${col}` : ""}`
+    : `endLine: ${line} ${col ? `endColumn=${col}` : ""}`;
+
+const joinStr = onGit ? "," : " ";
+
+const log = (
+  level: "warn" | "error" | "info",
+  message: string,
+  fileName?: string,
+  titleStr?: string,
+
+  start?: {
+    col?: number;
+    line: number;
+  },
+  end?: {
+    col?: number;
+    line: number;
+  },
+  indent?: string,
+  progressString?: string
+) => {
+  if (isGitCI()) {
+    if (level === "info") {
+      core.info(message);
+    } else {
+      const action = level === "error" ? core.error : core.warning;
+      action(message, {
+        file: fileName ? relative(cwd, fileName) : undefined,
+        startLine: start?.line,
+        startColumn: start?.col,
+        endLine: end?.line,
+        endColumn: end?.col,
+        title: titleStr,
+      });
+    }
+    return;
+  }
+  if (level === "info") {
+    console.log(`${info()} ${indent ?? ""}${progressString ?? ""} ${message}`);
+    return;
+  }
+  console.log(
+    `${level === "error" ? error() : warn()} ${indent ?? ""}${
+      progressString ?? ""
+    } ${[
+      fileName ? file(fileName) : undefined,
+      start ? startMsg(start.line, start.col) : undefined,
+      end ? endMsg(end.line, end.col) : undefined,
+      message,
+    ]
+      .filter((v) => !!v)
+      .join(joinStr)}`
+  );
+};
 
 const schema = z.object({
-  files: z.array(z.string(), { required_error: "Missing --files" }),
+  files: z.array(z.string().optional()).optional(),
+  cwd: z.string().optional(),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
   logLevel: z.enum(["none", "verbose"]).optional().default("none"),
-  formatting: z.boolean().optional().default(false),
+  format: z.boolean().optional().default(false),
+  formatFixAll: z.boolean().optional().default(false),
+  processIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
+  diagnosticsFull: z.boolean().optional().default(false),
+  showInfoDiagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
+  help: z.boolean().optional().default(false),
 });
+type SchemaType = z.infer<typeof schema>;
 
-const { values } = parseArgs({
-  options: {
-    files: { type: "string", multiple: true },
-    includes: { type: "string", multiple: true },
-    bindings: { type: "string", multiple: true },
-    logLevel: { type: "string" },
-    formatting: { type: "boolean" },
-    diagnostics: { type: "boolean" },
-    outFile: { type: "string" },
-  },
-  strict: true,
-});
+const helpString = `Usage: dts-linter [options]
 
-const parsed = schema.safeParse(values);
+Options:
+  --files                           List of input files (can be repeated).
+  --cwd <path>                      Set the current working directory.
+  --includes                        Paths (absolute or relative to CWD) to resolve includes (default: []).
+  --bindings                        Zephyr binding root directories (default: []).
+  --logLevel <none|verbose>         Set the logging verbosity (default: none).
+  --format                          Format the files specified in --files (default: false).
+  --formatFixAll                    Apply formatting changes directly to the files (default: false).
+  --processIncludes                 Process includes for formatting or diagnostics (default: false).
+  --diagnostics                     Show basic syntax diagnostics for files (default: false).
+  --diagnosticsFull                 Show full diagnostics for files (default: false).
+  --showInfoDiagnostics             Show informaiton diagnostics
+  --outFile <path>                  Write formatting diff output to this file (optional).
+  --help                            Show help information (default: false).
 
-if (!parsed.success) {
-  console.error("❌ Invalid CLI input:\n", parsed.error.format());
+Example:
+  dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
+
+let argv: SchemaType;
+try {
+  const { values } = parseArgs({
+    options: {
+      files: { type: "string", multiple: true },
+      cwd: { type: "string" },
+      includes: { type: "string", multiple: true },
+      bindings: { type: "string", multiple: true },
+      logLevel: { type: "string" },
+      format: { type: "boolean" },
+      formatFixAll: { type: "boolean" },
+      processIncludes: { type: "boolean" },
+      diagnostics: { type: "boolean" },
+      diagnosticsFull: { type: "boolean" },
+      showInfoDiagnostics: { type: "boolean" },
+      outFile: { type: "string" },
+      help: { type: "boolean" },
+    },
+    strict: true,
+  });
+
+  const safeParseData = schema.safeParse(values);
+  if (!safeParseData.success) {
+    console.log(helpString);
+    process.exit(1);
+  }
+  argv = safeParseData.data;
+} catch {
+  console.log(helpString);
   process.exit(1);
 }
 
-const argv = parsed.data;
+if (argv.help) {
+  console.log("Invalid arguments");
+  console.log(helpString);
+  process.exit(0);
+}
 
-type LogLevel = "none" | "verbose";
-const files = argv.files;
-const dtsIncludes = argv.includes;
+const includesPaths = argv.includes;
 const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
-const formatting = argv.formatting;
-const diagnostics = argv.diagnostics;
+const formatFixAll = argv.formatFixAll;
+const format = argv.format || formatFixAll;
+const diagnosticsFull = argv.diagnosticsFull;
+const diagnostics = argv.diagnostics || diagnosticsFull;
+const showInfoDiagnostics = argv.showInfoDiagnostics;
+const processIncludes = argv.processIncludes || diagnosticsFull;
 const outFile = argv.outFile;
 
-run(files, logLevel, dtsIncludes, bindings, outFile).catch((err) => {
+type LogLevel = "none" | "verbose";
+const cwd = argv.cwd ?? process.cwd();
+if (!argv.files) {
+  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${argv.cwd}`);
+  argv.files = globSync(
+    diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
+    {
+      cwd: argv.cwd,
+      nodir: true,
+    }
+  );
+}
+const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
+  resolve(cwd, f)
+);
+
+let i = 0;
+let total = filePaths.length;
+const diffs = new Map<string, string>();
+let formattingErrors: { file: string; context?: ContextListItem }[] = [];
+let diagnosticIssues = new Map<
+  string,
+  {
+    maxSeverity: DiagnosticSeverity;
+    message: string;
+    context: ContextListItem;
+  }[]
+>();
+
+run().catch((err) => {
   console.error("Error validating files:", err);
   process.exit(1);
 });
 
-let i = 0;
-let total = files.length;
-const diffs = new Map<string, string>();
-let formattingErrors: { file: string; context: ContextListItem }[] = [];
-let diagnosticIssues: {
-  file: string;
-  message: string;
-  context: ContextListItem;
-}[] = [];
+const diagnosticSeverityToString = (
+  severity: DiagnosticSeverity = DiagnosticSeverity.Hint
+): string => {
+  switch (severity) {
+    case DiagnosticSeverity.Error:
+      return "error";
+    case DiagnosticSeverity.Warning:
+      return "warn";
+    case DiagnosticSeverity.Information:
+      return "info";
+    case DiagnosticSeverity.Hint:
+      return "hint";
+  }
+};
 
-async function run(
-  filePaths: string[],
-  logLevel: LogLevel,
-  includesPaths: string[],
-  bindings: string[],
-  outFile?: string
-) {
+async function run() {
   const lspProcess = cp.spawn(serverPath, ["--stdio"], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -144,7 +287,7 @@ async function run(
     // Return workspace folders your client is aware of
     return [
       {
-        uri: `file://${process.cwd()}`,
+        uri: `file://${cwd}`,
         name: "root",
       },
     ];
@@ -158,6 +301,7 @@ async function run(
         defaultIncludePaths: includesPaths,
         defaultBindingType: "Zephyr",
         defaultZephyrBindings: bindings,
+        cwd,
         autoChangeContext: true,
         allowAdhocContexts: true,
         defaultLockRenameEdits: [],
@@ -165,11 +309,11 @@ async function run(
     },
   });
 
-  const workspaceFolders = [{ uri: toFileUri(process.cwd()), name: "root" }];
+  const workspaceFolders = [{ uri: toFileUri(cwd), name: "root" }];
 
   await connection.sendRequest("initialize", {
     processId: process.pid,
-    rootUri: `file://${process.cwd()}`,
+    rootUri: toFileUri(cwd),
     capabilities: {},
     workspaceFolders,
   });
@@ -177,6 +321,7 @@ async function run(
   await connection.sendNotification("initialized");
 
   const completedPaths = new Set<string>();
+  const diffApplied = new Set<string>();
 
   const paths = Array.from(new Set(filePaths)).sort((a, b) => {
     const getPriority = (file: string): number => {
@@ -194,23 +339,31 @@ async function run(
     const text = fs.readFileSync(filePath, "utf8");
 
     const textDocument: TextDocumentItem = {
-      uri: `file://${filePath}`,
+      uri: toFileUri(filePath),
       languageId: "devicetree",
       version: 0,
       text,
     };
 
-    connection.sendNotification("textDocument/didOpen", {
-      textDocument,
-    });
+    let files = [filePath];
+    let context: ContextListItem | undefined;
 
-    const context = await waitForNewActiveContext(connection);
-    const files = filePath.endsWith(".overlay")
-      ? [context.mainDtsPath.file]
-      : [
-          ...flatFileTree(context.mainDtsPath),
-          ...context.overlays.flatMap(flatFileTree),
-        ].filter((f) => !f.endsWith(".h") && existsSync(f));
+    if (diagnostics || processIncludes) {
+      connection.sendNotification("textDocument/didOpen", {
+        textDocument,
+      });
+
+      context = await waitForNewActiveContext(connection);
+      files = [
+        ...flatFileTree(context.mainDtsPath),
+        ...context.overlays.flatMap(flatFileTree),
+      ].filter(
+        (f) =>
+          !f.endsWith(".h") &&
+          existsSync(f) &&
+          (processIncludes || paths.includes(f))
+      );
+    }
 
     const isMainFile = (f: string) => f === filePath;
     const progressString = (isMainFile: boolean, j: number) =>
@@ -221,56 +374,45 @@ async function run(
             " "
           );
 
-    if (formatting) {
+    if (format) {
       await Promise.all(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
+          const indent = progressString(mainFile, j);
 
-          await formatFile(
-            connection,
-            f,
-            mainFile,
-            progressString(mainFile, j),
-            context
-          );
-
-          completedPaths.add(f);
-        })
-      );
-    }
-
-    if (diagnostics) {
-      await Promise.all(
-        files.map(async (f, j) => {
-          const mainFile = isMainFile(f);
-          if (filePath.endsWith(".dts")) {
-            const issues = await fileDiagnosticIssues(
+          try {
+            await formatFile(
               connection,
               f,
               mainFile,
-              progressString(mainFile, j)
+              indent,
+              mainFile ? text : fs.readFileSync(f, "utf8"),
+              context
             );
-            if (issues?.length) {
-              diagnosticIssues.push({
-                file: f,
-                context,
-                message: issues
-                  .map(
-                    (issue) =>
-                      `${issue.message}: {${JSON.stringify(
-                        issue.range.start
-                      )}}-{${JSON.stringify(issue.range.end)}}`
-                  )
-                  .join("\n\t\t"),
-              });
-            }
-          } else {
-            skippeddDiagnosticChecks.add(f);
-            console.log(
-              `${mainFile ? "" : "\t"}${progressString(
-                mainFile,
-                j
-              )} ⚠️ Skipping ${f} diagnostic check. Check can only be done on full context!`
+          } catch (e: any) {
+            formattingErrors.push({
+              file: f,
+              context,
+            });
+            const message =
+              (e?.data as Diagnostic[] | undefined)
+                ?.map(
+                  (issue) =>
+                    `[${diagnosticSeverityToString(issue.severity)}] ${
+                      issue.message
+                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                      issue.range.end
+                    )}`
+                )
+                .join("\n\t\t") ?? "";
+            log(
+              "error",
+              `\n\t\t${message}`,
+              f,
+              "Synatx error.",
+              undefined,
+              undefined,
+              indent
             );
           }
 
@@ -279,66 +421,159 @@ async function run(
       );
     }
 
-    connection.sendNotification("textDocument/didClose", {
-      textDocument: {
-        uri: `file://${filePath}`,
-      },
-    });
+    if (diagnostics && context) {
+      await Promise.all(
+        files.map(async (f, j) => {
+          const mainFile = isMainFile(f);
+          if (filePath.endsWith(".dts") || !diagnosticsFull) {
+            const issues = await fileDiagnosticIssues(
+              connection,
+              f,
+              mainFile,
+              progressString(mainFile, j)
+            );
+            if (issues?.length) {
+              if (!diagnosticIssues.has(f)) {
+                diagnosticIssues.set(f, []);
+              }
+              diagnosticIssues.get(f)?.push({
+                maxSeverity: issues.reduce(
+                  (p, c) =>
+                    (c.severity ?? DiagnosticSeverity.Hint) < p
+                      ? c.severity ?? DiagnosticSeverity.Hint
+                      : p,
+                  DiagnosticSeverity.Hint as DiagnosticSeverity
+                ),
+                context,
+                message: issues
+                  .map(
+                    (issue) =>
+                      `[${diagnosticSeverityToString(issue.severity)}] ${
+                        issue.message
+                      }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                        issue.range.end
+                      )}`
+                  )
+                  .join("\n\t\t"),
+              });
+            }
+          } else {
+            skippeddDiagnosticChecks.add(f);
+            log(
+              "warn",
+              "Check can only be done on full context!",
+              f,
+              undefined,
+              undefined,
+              undefined,
+              `${mainFile ? "" : "\t"}`,
+              progressString(mainFile, j)
+            );
+          }
 
-    await waitForNewContextDeleted(connection);
+          completedPaths.add(f);
+        })
+      );
+    }
+
+    if (diagnostics || processIncludes) {
+      connection.sendNotification("textDocument/didClose", {
+        textDocument: {
+          uri: `file://${filePath}`,
+        },
+      });
+
+      await waitForNewContextDeleted(connection);
+    }
+
+    if (formatFixAll) {
+      files
+        .filter((f) => !diffApplied.has(f))
+        .forEach((f) => {
+          const diff = diffs.get(f);
+          if (diff) {
+            const result = applyPatch(fs.readFileSync(f, "utf8"), diff);
+            if (result) {
+              diffApplied.add(f);
+              fs.writeFileSync(f, result, "utf8");
+            } else {
+              log("error", "Failed to apply changes to file", f);
+            }
+          }
+        });
+    }
   }
 
   if (outFile) {
     fs.writeFileSync(outFile, Array.from(diffs.values()).join("\n\n"));
   }
 
-  console.log("Processed", completedPaths.size, "files");
+  log("info", `Processed ${completedPaths.size} files`);
   connection.dispose();
   lspProcess.kill();
 
-  if (formatting) {
+  if (format && !isGitCI()) {
     if (formattingErrors.length)
-      console.log(
-        `❌ ${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+      log(
+        "error",
+        `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
       );
-    else console.log(`✅ All files passed formatting`);
+    else log("info", `All files passed formatting`);
   }
 
-  if (diagnostics) {
-    console.log("Diagnostic issues summary");
-    if (diagnosticIssues.length) {
+  if (diagnosticIssues.size) {
+    if (!isGitCI()) {
+      console.log("Diagnostic issues summary");
+
       console.log(
-        diagnosticIssues
-          .map(
-            (issue) =>
-              `${grpStart()}File: ${issue.file}\n\tBoard File: ${
-                issue.context.mainDtsPath.file
-              }\n\tIssues:\n\t\t${issue.message}\n${grpEnd()}`
+        Array.from(diagnosticIssues.entries())
+          .flatMap(
+            ([k, vs]) =>
+              `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
+                .flatMap(
+                  (v) =>
+                    `Board File: ${relative(
+                      cwd,
+                      v.context.mainDtsPath.file
+                    )}\n\tIssues:\n\t\t${v.message}`
+                )
+                .join("\n\t")}\n${grpEnd()}`
           )
           .join("\n")
       );
-      console.log(
-        `\n❌ ${
-          Array.from(diagnosticIssues.values()).map((v) => v.file).length
-        } of ${completedPaths.size} Failed diagnostic checks`
+
+      log(
+        "error",
+        `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
       );
+
+      if (skippeddDiagnosticChecks.size) {
+        log(
+          "warn",
+          `${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+        );
+      }
     }
 
-    if (skippeddDiagnosticChecks.size) {
-      console.log(
-        `⚠️ ${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
-      );
-    }
+    const errOrWarn = Array.from(diagnosticIssues).filter((i) =>
+      i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning)
+    );
+    const hasWarnOrError = !!errOrWarn.length;
 
     if (
       processedDiagnosticChecks.size === completedPaths.size &&
-      !diagnosticIssues.length
+      !hasWarnOrError
     ) {
-      console.log(`✅ All files passed diagnostic checks`);
+      log("info", "All files passed diagnostic checks");
+    } else {
+      log(
+        "error",
+        `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`
+      );
     }
   }
 
-  process.exit(formattingErrors.length || diagnosticIssues ? 1 : 0);
+  process.exit(formattingErrors.length || diagnosticIssues.size ? 1 : 0);
 }
 
 const flatFileTree = (file: File): string[] => {
@@ -350,35 +585,53 @@ const formatFile = async (
   absPath: string,
   mainFile: boolean,
   progressString: string,
-  context: ContextListItem
+  originalText: string,
+  context?: ContextListItem
 ) => {
-  const params: DocumentFormattingParams = {
+  const params: DocumentFormattingParams & { text?: string } = {
     textDocument: {
       uri: `file://${absPath}`,
     },
     options: {
-      tabSize: 4,
+      tabSize: 8,
       insertSpaces: false,
       trimTrailingWhitespace: true,
     },
+    text: originalText,
   };
 
-  const diff = (await connection.sendRequest(
-    "devicetree/formatingDiff", // TODO Fix formating -> formatting
+  const newText = (await connection.sendRequest(
+    "devicetree/formattingText",
     params
   )) as string | undefined;
 
   const indent = mainFile ? "" : "\t";
 
-  if (diff) {
-    console.log(
-      `${grpStart()}${indent}${progressString} ❌ ${absPath} is not correctly formatted.`
+  if (newText && newText !== originalText) {
+    const relativePath = relative(cwd, absPath);
+    const diff = createPatch(`a/${relativePath}`, originalText, newText);
+    log(
+      "error",
+      diff,
+      absPath,
+      "Not correctly formatted.",
+      undefined,
+      undefined,
+      indent,
+      progressString
     );
 
     if (diffs.has(absPath)) {
       if (diffs.get(absPath) !== diff && outFile) {
-        console.log(
-          `${indent} ⚠️ Multiple diffs for the same file. This diff will not be in the generated file!`
+        log(
+          "warn",
+          "Multiple diffs for the same file. This diff will not be in the generated file!",
+          absPath,
+          undefined,
+          undefined,
+          undefined,
+          indent,
+          progressString
         );
       }
     } else {
@@ -389,13 +642,17 @@ const formatFile = async (
       diffs.set(absPath, diff);
     }
 
-    console.log(diff);
-    console.log(grpEnd());
-
     return diff;
   } else {
-    console.log(
-      `${indent}${progressString} ✅ ${absPath} is correctly formatted.`
+    log(
+      "info",
+      `${relative(cwd, absPath)} is correctly formatted`,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      indent,
+      progressString
     );
   }
 };
@@ -412,38 +669,52 @@ const fileDiagnosticIssues = async (
   const issues = (
     ((await connection.sendRequest("devicetree/diagnosticIssues", {
       uri: `file://${absPath}`,
+      full: diagnosticsFull,
     })) as Diagnostic[] | undefined) ?? []
   ).filter(
     (issue) =>
       issue.severity === DiagnosticSeverity.Error ||
-      issue.severity === DiagnosticSeverity.Warning
+      issue.severity === DiagnosticSeverity.Warning ||
+      (issue.severity === DiagnosticSeverity.Information && showInfoDiagnostics)
   );
 
   const indent = mainFile ? "" : "\t";
 
   if (issues.length) {
-    console.log(
-      `${grpStart()}${indent}${progressString} ❌ ${absPath} has ${
-        issues.length
-      } diagnostic errors!`
+    issues.forEach((issue, i) =>
+      log(
+        issue.severity === DiagnosticSeverity.Error
+          ? "error"
+          : issue.severity === DiagnosticSeverity.Warning
+          ? "warn"
+          : "warn",
+        issue.message,
+        onGit ? absPath : i ? "\t" : `${absPath}\n${indent}\t`,
+        undefined,
+        {
+          line: issue.range.start.line + 1,
+          col: issue.range.start.character,
+        },
+        {
+          line: issue.range.end.line + 1,
+          col: issue.range.end.character,
+        },
+        indent,
+        i ? "" : progressString
+      )
     );
-
-    console.log(
-      issues
-        .map(
-          (issue) =>
-            `${indent}\t${issue.message}: ${JSON.stringify(
-              issue.range.start
-            )}${JSON.stringify(issue.range.end)}`
-        )
-        .join("\n")
-    );
-    console.log(grpEnd());
 
     return issues;
   } else {
-    console.log(
-      `${indent}${progressString} ✅ ${absPath} has no diagnostic errors.`
+    log(
+      "info",
+      `No diagnostic errors in ${relative(cwd, absPath)}`,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      indent,
+      progressString
     );
   }
 };

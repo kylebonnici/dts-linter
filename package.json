@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.0.0-alpha20",
+  "version": "0.1.0",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -25,8 +25,11 @@
   "license": "Apache-2.0",
   "description": "",
   "dependencies": {
-    "devicetree-language-server": "^0.4.4",
-    "devicetree-language-server-types": "^0.0.2-alpha.7",
+    "@actions/core": "^1.11.1",
+    "devicetree-language-server": "^0.5.1",
+    "devicetree-language-server-types": "^0.0.2-alpha.8",
+    "diff": "^8.0.2",
+    "glob": "^11.0.3",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-textdocument": "^1.0.12",
     "zod": "^3.25.67"
