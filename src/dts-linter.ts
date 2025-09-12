@@ -195,18 +195,6 @@ if (argv.help) {
   process.exit(0);
 }
 
-type LogLevel = "none" | "verbose";
-const cwd = argv.cwd ?? process.cwd();
-if (!argv.files) {
-  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${argv.cwd}`);
-  argv.files = globSync("**/*.{dts,dtsi,overlay}", {
-    cwd: argv.cwd,
-    nodir: true,
-  });
-}
-const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
-  resolve(cwd, f)
-);
 const includesPaths = argv.includes;
 const bindings = argv.bindings;
 const logLevel = argv.logLevel as LogLevel;
@@ -217,6 +205,22 @@ const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes || diagnosticsFull;
 const outFile = argv.outFile;
+
+type LogLevel = "none" | "verbose";
+const cwd = argv.cwd ?? process.cwd();
+if (!argv.files) {
+  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${argv.cwd}`);
+  argv.files = globSync(
+    diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
+    {
+      cwd: argv.cwd,
+      nodir: true,
+    }
+  );
+}
+const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
+  resolve(cwd, f)
+);
 
 let i = 0;
 let total = filePaths.length;
