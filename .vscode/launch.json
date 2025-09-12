@@ -11,12 +11,11 @@
       ],
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
-        "--files",
-        "/Users/kylebonnici/workspace/personal/zephyr/boards/nordic/nrf52840dk/nrf52840dk_nrf52840.dts",
         "--format",
-        "--diagnostics",
         "--cwd",
-        "/Users/kylebonnici/workspace/personal/zephyr"
+        "/Users/kylebonnici/workspace/personal/zephyr/dts/arm/nordic/",
+        "--files",
+        "/Users/kylebonnici/workspace/personal/zephyr/dts/vendor/nordic/nrf54l05.dtsi"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",

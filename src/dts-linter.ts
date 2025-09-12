@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { relative, resolve } from "node:path";
-import { applyPatch } from "diff";
+import { applyPatch, createPatch } from "diff";
 import * as core from "@actions/core";
 import { globSync } from "glob";
 
@@ -213,15 +213,15 @@ const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
 const diagnosticsFull = argv.diagnosticsFull;
-const diagnostics = argv.diagnostics || diagnosticsFull || format;
+const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
-const processIncludes = argv.processIncludes;
+const processIncludes = argv.processIncludes || diagnosticsFull;
 const outFile = argv.outFile;
 
 let i = 0;
 let total = filePaths.length;
 const diffs = new Map<string, string>();
-let formattingErrors: { file: string; context: ContextListItem }[] = [];
+let formattingErrors: { file: string; context?: ContextListItem }[] = [];
 let diagnosticIssues = new Map<
   string,
   {
@@ -341,20 +341,25 @@ async function run() {
       text,
     };
 
-    connection.sendNotification("textDocument/didOpen", {
-      textDocument,
-    });
+    let files = [filePath];
+    let context: ContextListItem | undefined;
 
-    const context = await waitForNewActiveContext(connection);
-    const files = [
-      ...flatFileTree(context.mainDtsPath),
-      ...context.overlays.flatMap(flatFileTree),
-    ].filter(
-      (f) =>
-        !f.endsWith(".h") &&
-        existsSync(f) &&
-        (processIncludes || paths.includes(f))
-    );
+    if (diagnostics || processIncludes) {
+      connection.sendNotification("textDocument/didOpen", {
+        textDocument,
+      });
+
+      context = await waitForNewActiveContext(connection);
+      files = [
+        ...flatFileTree(context.mainDtsPath),
+        ...context.overlays.flatMap(flatFileTree),
+      ].filter(
+        (f) =>
+          !f.endsWith(".h") &&
+          existsSync(f) &&
+          (processIncludes || paths.includes(f))
+      );
+    }
 
     const isMainFile = (f: string) => f === filePath;
     const progressString = (isMainFile: boolean, j: number) =>
@@ -372,20 +377,39 @@ async function run() {
           const indent = progressString(mainFile, j);
 
           try {
-            await formatFile(connection, f, mainFile, indent, context);
-          } catch (e) {
-            if (!diagnostics) {
-              log(
-                "error",
-                (e as Error)?.message,
-                f,
-                undefined,
-                undefined,
-                undefined,
-                undefined,
-                indent
-              );
-            }
+            await formatFile(
+              connection,
+              f,
+              mainFile,
+              indent,
+              mainFile ? text : fs.readFileSync(f, "utf8"),
+              context
+            );
+          } catch (e: any) {
+            formattingErrors.push({
+              file: f,
+              context,
+            });
+            const message =
+              (e?.data as Diagnostic[] | undefined)
+                ?.map(
+                  (issue) =>
+                    `[${diagnosticSeverityToString(issue.severity)}] ${
+                      issue.message
+                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                      issue.range.end
+                    )}`
+                )
+                .join("\n\t\t") ?? "";
+            log(
+              "error",
+              `\n\t\t${message}`,
+              f,
+              "Synatx error.",
+              undefined,
+              undefined,
+              indent
+            );
           }
 
           completedPaths.add(f);
@@ -393,7 +417,7 @@ async function run() {
       );
     }
 
-    if (diagnostics) {
+    if (diagnostics && context) {
       await Promise.all(
         files.map(async (f, j) => {
           const mainFile = isMainFile(f);
@@ -448,13 +472,15 @@ async function run() {
       );
     }
 
-    connection.sendNotification("textDocument/didClose", {
-      textDocument: {
-        uri: `file://${filePath}`,
-      },
-    });
+    if (diagnostics || processIncludes) {
+      connection.sendNotification("textDocument/didClose", {
+        textDocument: {
+          uri: `file://${filePath}`,
+        },
+      });
 
-    await waitForNewContextDeleted(connection);
+      await waitForNewContextDeleted(connection);
+    }
 
     if (formatFixAll) {
       files
@@ -491,32 +517,31 @@ async function run() {
     else log("info", `All files passed formatting`);
   }
 
-  if (diagnostics) {
+  if (diagnosticIssues.size) {
     if (!isGitCI()) {
       console.log("Diagnostic issues summary");
-      if (diagnosticIssues.size) {
-        console.log(
-          Array.from(diagnosticIssues.entries())
-            .flatMap(
-              ([k, vs]) =>
-                `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
-                  .flatMap(
-                    (v) =>
-                      `Board File: ${relative(
-                        cwd,
-                        v.context.mainDtsPath.file
-                      )}\n\tIssues:\n\t\t${v.message}`
-                  )
-                  .join("\n\t")}\n${grpEnd()}`
-            )
-            .join("\n")
-        );
 
-        log(
-          "error",
-          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
-        );
-      }
+      console.log(
+        Array.from(diagnosticIssues.entries())
+          .flatMap(
+            ([k, vs]) =>
+              `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
+                .flatMap(
+                  (v) =>
+                    `Board File: ${relative(
+                      cwd,
+                      v.context.mainDtsPath.file
+                    )}\n\tIssues:\n\t\t${v.message}`
+                )
+                .join("\n\t")}\n${grpEnd()}`
+          )
+          .join("\n")
+      );
+
+      log(
+        "error",
+        `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+      );
 
       if (skippeddDiagnosticChecks.size) {
         log(
@@ -556,9 +581,10 @@ const formatFile = async (
   absPath: string,
   mainFile: boolean,
   progressString: string,
-  context: ContextListItem
+  originalText: string,
+  context?: ContextListItem
 ) => {
-  const params: DocumentFormattingParams = {
+  const params: DocumentFormattingParams & { text?: string } = {
     textDocument: {
       uri: `file://${absPath}`,
     },
@@ -567,16 +593,19 @@ const formatFile = async (
       insertSpaces: false,
       trimTrailingWhitespace: true,
     },
+    text: originalText,
   };
 
-  const diff = (await connection.sendRequest(
-    "devicetree/formattingDiff",
+  const newText = (await connection.sendRequest(
+    "devicetree/formattingText",
     params
   )) as string | undefined;
 
   const indent = mainFile ? "" : "\t";
 
-  if (diff) {
+  if (newText && newText !== originalText) {
+    const relativePath = relative(cwd, absPath);
+    const diff = createPatch(`a/${relativePath}`, originalText, newText);
     log(
       "error",
       diff,
