@@ -7,9 +7,8 @@
     "url": "https://github.com/kylebonnici/dts-linter"
   },
   "scripts": {
-    "compile": "node ./esbuild.js && npm run bundle:dtslsp",
-    "compile:prod": "node ./esbuild.js --production && npm run bundle:dtslsp",
-    "bundle:dtslsp": "cp ./node_modules/devicetree-language-server/dist/server.js ./dist/server.js"
+    "compile": "node ./esbuild.js",
+    "compile:prod": "node ./esbuild.js --production"
   },
   "bin": "./dist/dts-linter.js",
   "files": [
@@ -27,7 +26,6 @@
   "dependencies": {
     "@actions/core": "^1.11.1",
     "devicetree-language-server": "^0.5.1",
-    "devicetree-language-server-types": "^0.0.2-alpha.8",
     "diff": "^8.0.2",
     "glob": "^11.0.3",
     "vscode-jsonrpc": "^8.2.1",
@@ -38,6 +36,7 @@
     "@types/node": "^24.0.3",
     "esbuild": "^0.25.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "devicetree-language-server-types": "^0.0.2-alpha.8"
   }
 }

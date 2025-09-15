@@ -20,10 +20,7 @@ import { applyPatch, createPatch } from "diff";
 import * as core from "@actions/core";
 import { globSync } from "glob";
 
-const isDebugging = __dirname.endsWith("src");
-const serverPath = isDebugging
-  ? path.join(__dirname, "..", "dist", "server.js")
-  : path.join(__dirname, "server.js");
+const serverPath = require.resolve("devicetree-language-server/dist/server.js");
 
 function toFileUri(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
