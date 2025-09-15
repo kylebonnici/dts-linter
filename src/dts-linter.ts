@@ -226,6 +226,7 @@ let i = 0;
 let total = filePaths.length;
 const diffs = new Map<string, string>();
 let formattingErrors: { file: string; context?: ContextListItem }[] = [];
+let formattingApplied: { file: string; context?: ContextListItem }[] = [];
 let diagnosticIssues = new Map<
   string,
   {
@@ -496,6 +497,7 @@ async function run() {
             if (result) {
               diffApplied.add(f);
               fs.writeFileSync(f, result, "utf8");
+              formattingApplied.push({ file: f, context });
             } else {
               log("error", "Failed to apply changes to file", f);
             }
@@ -513,12 +515,21 @@ async function run() {
   lspProcess.kill();
 
   if (format && !isGitCI()) {
-    if (formattingErrors.length)
+    if (formattingErrors.length - formattingApplied.length)
       log(
         "error",
-        `${formattingErrors.length} of ${completedPaths.size} Failed formatting checks`
+        `${formattingErrors.length - formattingApplied.length} of ${
+          completedPaths.size
+        } Failed formatting checks`
       );
-    else log("info", `All files passed formatting`);
+
+    if (formattingApplied.length)
+      log(
+        "info",
+        `${formattingApplied.length} of ${formattingErrors.length} formatted in place.`
+      );
+
+    if (!formattingErrors.length) log("info", `All files passed formatting`);
   }
 
   if (diagnosticIssues.size) {
@@ -573,7 +584,11 @@ async function run() {
     }
   }
 
-  process.exit(formattingErrors.length || diagnosticIssues.size ? 1 : 0);
+  process.exit(
+    formattingErrors.length - formattingApplied.length || diagnosticIssues.size
+      ? 1
+      : 0
+  );
 }
 
 const flatFileTree = (file: File): string[] => {
