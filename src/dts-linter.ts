@@ -209,7 +209,7 @@ const outFile = argv.outFile;
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
 if (!argv.files) {
-  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${argv.cwd}`);
+  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
   argv.files = globSync(
     diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
     {
