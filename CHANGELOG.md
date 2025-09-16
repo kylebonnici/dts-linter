@@ -8,9 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Renamed `--outputType` flag to `--outputFormat` 
-- Renamed `--outFile` flag to `--patchFile` 
-- Renamed `--files` flag to `--file` 
+- Renamed `--outputType` flag to `--outputFormat`
+- Renamed `--outFile` flag to `--patchFile`
+- Renamed `--files` flag to `--file`
+- Renamed `--includes` flag to `--include`
+- Renamed `--bindings` flag to `--binding`
 
 ## [0.2.1] - 2025-09-16
 
@@ -20,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- Moved `--annotate` flag to `--outputType` 
+- Moved `--annotate` flag to `--outputType`
 
 ## [0.2.0] - 2025-09-16
 

@@ -49,8 +49,8 @@ function isGitCI(): boolean {
 const schema = z.object({
   file: z.array(z.string().optional()).optional(),
   cwd: z.string().optional(),
-  includes: z.array(z.string()).optional().default([]),
-  bindings: z.array(z.string()).optional().default([]),
+  include: z.array(z.string()).optional().default([]),
+  binding: z.array(z.string()).optional().default([]),
   logLevel: z.enum(["none", "verbose"]).optional().default("none"),
   format: z.boolean().optional().default(false),
   formatFixAll: z.boolean().optional().default(false),
@@ -94,8 +94,8 @@ try {
     options: {
       file: { type: "string", multiple: true },
       cwd: { type: "string" },
-      includes: { type: "string", multiple: true },
-      bindings: { type: "string", multiple: true },
+      include: { type: "string", multiple: true },
+      binding: { type: "string", multiple: true },
       logLevel: { type: "string" },
       format: { type: "boolean" },
       formatFixAll: { type: "boolean" },
@@ -127,8 +127,8 @@ if (argv.help) {
   process.exit(0);
 }
 
-const includesPaths = argv.includes;
-const bindings = argv.bindings;
+const includesPaths = argv.include;
+const bindings = argv.binding;
 const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
