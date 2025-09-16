@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Renamed `--files` flag to `--file`
 - Renamed `--includes` flag to `--include`
 - Renamed `--bindings` flag to `--binding`
+- JSON Output will return one Object result at the end
 
 ## [0.2.1] - 2025-09-16
 

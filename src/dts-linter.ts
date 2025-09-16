@@ -176,18 +176,16 @@ const log = (
   progressString?: string
 ) => {
   if (outputFormat === "json") {
-    console.log(
-      JSON.stringify({
-        level,
-        message,
-        file: fileName,
-        title: titleStr,
-        startLine: start?.line,
-        startCol: start?.col,
-        endLine: end?.line,
-        endCol: end?.col,
-      })
-    );
+    jsonOut.issues.push({
+      level,
+      message,
+      file: fileName,
+      title: titleStr,
+      startLine: start?.line,
+      startCol: start?.col,
+      endLine: end?.line,
+      endCol: end?.col,
+    });
     return;
   }
 
@@ -229,6 +227,22 @@ const log = (
 
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
+
+type Issue = {
+  level: string;
+  message: string;
+  title?: string;
+  file?: string;
+  startLine?: number;
+  startCol?: number;
+  endLine?: number;
+  endCol?: number;
+};
+const jsonOut: { cwd: string; issues: Issue[] } = {
+  cwd,
+  issues: [],
+};
+
 if (!argv.file) {
   log("info", `Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
   argv.file = globSync(
@@ -480,7 +494,7 @@ async function run() {
               });
             }
           } else {
-            skippeddDiagnosticChecks.add(f);
+            skippedDiagnosticChecks.add(f);
             log(
               "warn",
               "Check can only be done on full context!",
@@ -531,77 +545,81 @@ async function run() {
     fs.writeFileSync(patchFile, Array.from(diffs.values()).join("\n\n"));
   }
 
-  log("info", `Processed ${completedPaths.size} files`);
   connection.dispose();
   lspProcess.kill();
 
-  if (format && !onGit) {
-    if (formattingErrors.length - formattingApplied.length)
-      log(
-        "error",
-        `${formattingErrors.length - formattingApplied.length} of ${
-          completedPaths.size
-        } Failed formatting checks`
-      );
-
-    if (formattingApplied.length)
-      log(
-        "info",
-        `${formattingApplied.length} of ${formattingErrors.length} formatted in place.`
-      );
-
-    if (!formattingErrors.length) log("info", `All files passed formatting`);
-  }
-
-  if (diagnosticIssues.size) {
-    if (outputFormat === "pretty" || (outputFormat === "auto" && !onGit)) {
-      console.log("Diagnostic issues summary");
-
-      console.log(
-        Array.from(diagnosticIssues.entries())
-          .flatMap(
-            ([k, vs]) =>
-              `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
-                .flatMap(
-                  (v) =>
-                    `Board File: ${relative(
-                      cwd,
-                      v.context.mainDtsPath.file
-                    )}\n\tIssues:\n\t\t${v.message}`
-                )
-                .join("\n\t")}\n${grpEnd()}`
-          )
-          .join("\n")
-      );
-
-      log(
-        "error",
-        `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
-      );
-
-      if (skippeddDiagnosticChecks.size) {
+  if (outputFormat === "json") {
+    console.log(JSON.stringify(jsonOut, undefined, 4));
+  } else {
+    log("info", `Processed ${completedPaths.size} files`);
+    if (format && !onGit) {
+      if (formattingErrors.length - formattingApplied.length)
         log(
-          "warn",
-          `${skippeddDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+          "error",
+          `${formattingErrors.length - formattingApplied.length} of ${
+            completedPaths.size
+          } Failed formatting checks`
         );
-      }
+
+      if (formattingApplied.length)
+        log(
+          "info",
+          `${formattingApplied.length} of ${formattingErrors.length} formatted in place.`
+        );
+
+      if (!formattingErrors.length) log("info", `All files passed formatting`);
     }
 
-    const errOrWarn = Array.from(diagnosticIssues).filter((i) =>
-      i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning)
-    );
-    const hasWarnOrError = !!errOrWarn.length;
+    if (diagnosticIssues.size) {
+      if (outputFormat === "pretty" || (outputFormat === "auto" && !onGit)) {
+        console.log("Diagnostic issues summary");
 
-    if (
-      processedDiagnosticChecks.size === completedPaths.size &&
-      !hasWarnOrError
-    ) {
-      log("info", "All files passed diagnostic checks");
-    } else {
-      log(
-        "error",
-        `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`
+        console.log(
+          Array.from(diagnosticIssues.entries())
+            .flatMap(
+              ([k, vs]) =>
+                `${grpStart()}File: ${relative(cwd, k)}\n\t${vs
+                  .flatMap(
+                    (v) =>
+                      `Board File: ${relative(
+                        cwd,
+                        v.context.mainDtsPath.file
+                      )}\n\tIssues:\n\t\t${v.message}`
+                  )
+                  .join("\n\t")}\n${grpEnd()}`
+            )
+            .join("\n")
+        );
+
+        log(
+          "error",
+          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+        );
+
+        if (skippedDiagnosticChecks.size) {
+          log(
+            "warn",
+            `${skippedDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+          );
+        }
+      }
+
+      const errOrWarn = Array.from(diagnosticIssues).filter((i) =>
+        i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning)
       );
+      const hasWarnOrError = !!errOrWarn.length;
+
+      if (
+        processedDiagnosticChecks.size === completedPaths.size &&
+        !hasWarnOrError
+      ) {
+        log("info", "All files passed diagnostic checks");
+      } else {
+        log(
+          "error",
+          `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`
+        );
+      }
     }
   }
 
@@ -694,7 +712,7 @@ const formatFile = async (
 };
 
 let processedDiagnosticChecks = new Set<string>();
-let skippeddDiagnosticChecks = new Set<string>();
+let skippedDiagnosticChecks = new Set<string>();
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
   absPath: string,
