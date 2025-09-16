@@ -24,7 +24,7 @@ npm install -g --ignore-scripts dts-linter
 
 ```bash
 # Lint and format specific files
-dts-linter --files file1.dts --files file2.dtsi --format
+dts-linter --file file1.dts --file file2.dtsi --format
 
 # Auto-discover and process all DTS files in current directory
 dts-linter --format
@@ -37,7 +37,7 @@ dts-linter --formatFixAll
 
 | Option                  | Type            | Default         | Description                                                                                          |
 | ----------------------- | --------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
-| `--files`               | string          | Auto-discover   | List of input files (can be repeated)                                                                |
+| `--file`                | string          | Auto-discover   | List of input files (can be repeated)                                                                |
 | `--cwd`                 | string          | `process.cwd()` | Set the current working directory                                                                    |
 | `--includes`            | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                             |
 | `--bindings`            | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                       |
@@ -56,13 +56,13 @@ dts-linter --formatFixAll
 #### Check formatting without making changes
 
 ```bash
-dts-linter --format --files my-board.dts
+dts-linter --format --file my-board.dts
 ```
 
 #### Auto-fix formatting issues
 
 ```bash
-dts-linter --formatFixAll --files my-board.dts --files my-overlay.dtsi
+dts-linter --formatFixAll --file my-board.dts --file my-overlay.dtsi
 ```
 
 #### Full diagnostic check with include processing
@@ -79,7 +79,7 @@ dts-linter --format --patchFile changes.patch
 
 ## File Discovery
 
-When no `--files` option is provided, the linter automatically searches for DeviceTree files using the pattern `**/*.{dts,dtsi,overlay}` or `**/*.{dts}` when using `--diagnosticsFull` in the current working directory.
+When no `--file` option is provided, the linter automatically searches for DeviceTree files using the pattern `**/*.{dts,dtsi,overlay}` or `**/*.{dts}` when using `--diagnosticsFull` in the current working directory.
 
 ## Output Formats
 

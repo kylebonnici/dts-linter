@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Renamed `--outputType` flag to `--outputFormat` 
 - Renamed `--outFile` flag to `--patchFile` 
+- Renamed `--files` flag to `--file` 
 
 ## [0.2.1] - 2025-09-16
 

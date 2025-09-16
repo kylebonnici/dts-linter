@@ -47,7 +47,7 @@ function isGitCI(): boolean {
 }
 
 const schema = z.object({
-  files: z.array(z.string().optional()).optional(),
+  file: z.array(z.string().optional()).optional(),
   cwd: z.string().optional(),
   includes: z.array(z.string()).optional().default([]),
   bindings: z.array(z.string()).optional().default([]),
@@ -70,12 +70,12 @@ type SchemaType = z.infer<typeof schema>;
 const helpString = `Usage: dts-linter [options]
 
 Options:
-  --files                                         List of input files (can be repeated).
+  --file                                          List of input files (can be repeated).
   --cwd <path>                                    Set the current working directory.
   --includes                                      Paths (absolute or relative to CWD) to resolve includes (default: []).
   --bindings                                      Zephyr binding root directories (default: []).
   --logLevel <none|verbose>                       Set the logging verbosity (default: none).
-  --format                                        Format the files specified in --files (default: false).
+  --format                                        Format the files specified in --file (default: false).
   --formatFixAll                                  Apply formatting changes directly to the files (default: false).
   --processIncludes                               Process includes for formatting or diagnostics (default: false).
   --diagnostics                                   Show basic syntax diagnostics for files (default: false).
@@ -86,13 +86,13 @@ Options:
   --help                                          Show help information (default: false).
 
 Example:
-  dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
+  dts-linter --file file1.dts --file file2.dtsi --format --diagnostics`;
 
 let argv: SchemaType;
 try {
   const { values } = parseArgs({
     options: {
-      files: { type: "string", multiple: true },
+      file: { type: "string", multiple: true },
       cwd: { type: "string" },
       includes: { type: "string", multiple: true },
       bindings: { type: "string", multiple: true },
@@ -229,9 +229,9 @@ const log = (
 
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
-if (!argv.files) {
+if (!argv.file) {
   log("info", `Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
-  argv.files = globSync(
+  argv.file = globSync(
     diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
     {
       cwd: argv.cwd,
@@ -239,7 +239,7 @@ if (!argv.files) {
     }
   );
 }
-const filePaths = (argv.files.filter((v) => v) as string[]).map((f) =>
+const filePaths = (argv.file.filter((v) => v) as string[]).map((f) =>
   resolve(cwd, f)
 );
 
