@@ -39,16 +39,17 @@ dts-linter --formatFixAll
 | ----------------------- | --------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
 | `--file`                | string          | Auto-discover   | List of input files (can be repeated)                                                                |
 | `--cwd`                 | string          | `process.cwd()` | Set the current working directory                                                                    |
-| `--includes`            | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                             |
-| `--bindings`            | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                       |
+| `--include`             | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                             |
+| `--binding`             | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                       |
 | `--logLevel`            | `none\|verbose` | `none`          | Set the logging verbosity                                                                            |
 | `--format`              | boolean         | `false`         | Format the specified files (automatically set to true when formatFixAll)                             |
 | `--formatFixAll`        | boolean         | `false`         | Apply formatting changes directly to files                                                           |
 | `--processIncludes`     | boolean         | `false`         | Process includes for formatting or diagnostics (automatically set to true when diagnosticsFull)      |
 | `--diagnostics`         | boolean         | `false`         | Show basic syntax diagnostics                                                                        |
-| `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --includes, --bindings for proper usage) |
+| `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --include, --binding for proper usage)   |
 | `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                   |
 | `--patchFile`           | string          | -               | Write formatting diff output to file                                                                 |
+| `--outputType`          | string          | `auto`          | Output format type: auto, pretty, annotations, or json                                               |
 | `--help`                | boolean         | `false`         | Show help information                                                                                |
 
 ### Examples
@@ -68,7 +69,7 @@ dts-linter --formatFixAll --file my-board.dts --file my-overlay.dtsi
 #### Full diagnostic check with include processing
 
 ```bash
-dts-linter --diagnosticsFull --includes ./include --bindings ./zephyr/dts/bindings
+dts-linter --diagnosticsFull --include ./include --binding ./zephyr/dts/bindings
 ```
 
 #### Generate diff file for review
@@ -97,6 +98,26 @@ When running in CI environments (GitHub Actions, GitLab CI, etc.), the tool auto
 - `::warning` for formatting issues
 - `::error` for syntax errors
 - File locations and line numbers included
+
+### JSON
+
+Returns a JSON object of type 
+
+```typescript
+{
+    cwd: string;
+    issues: {
+        level: string;
+        message: string;
+        title?: string;
+        file?: string;
+        startLine?: number;
+        startCol?: number;
+        endLine?: number;
+        endCol?: number;
+    }[];
+}
+```
 
 ### Diff Output
 
