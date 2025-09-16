@@ -59,7 +59,10 @@ const schema = z.object({
   diagnosticsFull: z.boolean().optional().default(false),
   showInfoDiagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
-  annotate: z.boolean().optional().default(false),
+  outputType: z
+    .enum(["auto", "pretty", "annotations", "json"])
+    .optional()
+    .default("auto"),
   help: z.boolean().optional().default(false),
 });
 type SchemaType = z.infer<typeof schema>;
@@ -67,20 +70,20 @@ type SchemaType = z.infer<typeof schema>;
 const helpString = `Usage: dts-linter [options]
 
 Options:
-  --files                           List of input files (can be repeated).
-  --cwd <path>                      Set the current working directory.
-  --includes                        Paths (absolute or relative to CWD) to resolve includes (default: []).
-  --bindings                        Zephyr binding root directories (default: []).
-  --logLevel <none|verbose>         Set the logging verbosity (default: none).
-  --format                          Format the files specified in --files (default: false).
-  --formatFixAll                    Apply formatting changes directly to the files (default: false).
-  --processIncludes                 Process includes for formatting or diagnostics (default: false).
-  --diagnostics                     Show basic syntax diagnostics for files (default: false).
-  --diagnosticsFull                 Show full diagnostics for files (default: false).
-  --showInfoDiagnostics             Show informaiton diagnostics
-  --outFile <path>                  Write formatting diff output to this file (optional).
-  --annotate                        Force output to be GitHub Actions-compatible annotations.
-  --help                            Show help information (default: false).
+  --files                                         List of input files (can be repeated).
+  --cwd <path>                                    Set the current working directory.
+  --includes                                      Paths (absolute or relative to CWD) to resolve includes (default: []).
+  --bindings                                      Zephyr binding root directories (default: []).
+  --logLevel <none|verbose>                       Set the logging verbosity (default: none).
+  --format                                        Format the files specified in --files (default: false).
+  --formatFixAll                                  Apply formatting changes directly to the files (default: false).
+  --processIncludes                               Process includes for formatting or diagnostics (default: false).
+  --diagnostics                                   Show basic syntax diagnostics for files (default: false).
+  --diagnosticsFull                               Show full diagnostics for files (default: false).
+  --showInfoDiagnostics                           Show information diagnostics
+  --outFile <path>                                Write formatting diff output to this file (optional).
+  --outputType <auto|pretty|annotations|json>     stdout output type.
+  --help                                          Show help information (default: false).
 
 Example:
   dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
@@ -101,7 +104,7 @@ try {
       diagnosticsFull: { type: "boolean" },
       showInfoDiagnostics: { type: "boolean" },
       outFile: { type: "string" },
-      annotate: { type: "boolean" },
+      outputType: { type: "string" },
       help: { type: "boolean" },
     },
     strict: true,
@@ -133,16 +136,15 @@ const diagnosticsFull = argv.diagnosticsFull;
 const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes || diagnosticsFull;
-const annotate = argv.annotate;
+const outputType = argv.outputType;
 const outFile = argv.outFile;
 
-const onGit = isGitCI() || annotate;
+const onGit =
+  (isGitCI() && outputType === "auto") || outputType === "annotations";
 
 const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
-const info = () => (onGit ? "::notice" : "✅");
-const warn = () => (onGit ? "::warning" : "⚠️");
-const error = () => (onGit ? "::error" : "❌");
+
 const file = (file: string) =>
   onGit ? `file=${relative(cwd, file)}` : relative(cwd, file);
 const startMsg = (line: number, col?: number) =>
@@ -173,7 +175,23 @@ const log = (
   indent?: string,
   progressString?: string
 ) => {
-  if (isGitCI()) {
+  if (outputType === "json") {
+    console.log(
+      JSON.stringify({
+        level,
+        message,
+        file: fileName,
+        title: titleStr,
+        startLine: start?.line,
+        startCol: start?.col,
+        endLine: end?.line,
+        endCol: end?.col,
+      })
+    );
+    return;
+  }
+
+  if (onGit) {
     if (level === "info") {
       core.info(message);
     } else {
@@ -189,12 +207,14 @@ const log = (
     }
     return;
   }
+
   if (level === "info") {
-    console.log(`${info()} ${indent ?? ""}${progressString ?? ""} ${message}`);
+    console.log(`✅ ${indent ?? ""}${progressString ?? ""} ${message}`);
     return;
   }
+
   console.log(
-    `${level === "error" ? error() : warn()} ${indent ?? ""}${
+    `${level === "error" ? "❌" : "⚠️"} ${indent ?? ""}${
       progressString ?? ""
     } ${[
       fileName ? file(fileName) : undefined,
@@ -515,7 +535,7 @@ async function run() {
   connection.dispose();
   lspProcess.kill();
 
-  if (format && !isGitCI()) {
+  if (format && !onGit) {
     if (formattingErrors.length - formattingApplied.length)
       log(
         "error",
@@ -534,7 +554,7 @@ async function run() {
   }
 
   if (diagnosticIssues.size) {
-    if (!isGitCI()) {
+    if (!onGit) {
       console.log("Diagnostic issues summary");
 
       console.log(
