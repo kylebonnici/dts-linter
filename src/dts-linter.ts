@@ -58,7 +58,7 @@ const schema = z.object({
   diagnostics: z.boolean().optional().default(false),
   diagnosticsFull: z.boolean().optional().default(false),
   showInfoDiagnostics: z.boolean().optional().default(false),
-  outFile: z.string().optional(),
+  patchFile: z.string().optional(),
   outputFormat: z
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
@@ -81,7 +81,7 @@ Options:
   --diagnostics                                   Show basic syntax diagnostics for files (default: false).
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --showInfoDiagnostics                           Show information diagnostics
-  --outFile <path>                                Write formatting diff output to this file (optional).
+  --patchFile <path>                              Write formatting diff output to this file (optional).
   --outputType <auto|pretty|annotations|json>     stdout output type.
   --help                                          Show help information (default: false).
 
@@ -103,7 +103,7 @@ try {
       diagnostics: { type: "boolean" },
       diagnosticsFull: { type: "boolean" },
       showInfoDiagnostics: { type: "boolean" },
-      outFile: { type: "string" },
+      patchFile: { type: "string" },
       outputFormat: { type: "string" },
       help: { type: "boolean" },
     },
@@ -137,7 +137,7 @@ const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes || diagnosticsFull;
 const outputFormat = argv.outputFormat;
-const outFile = argv.outFile;
+const patchFile = argv.patchFile;
 
 const onGit =
   (isGitCI() && outputFormat === "auto") || outputFormat === "annotations";
@@ -527,8 +527,8 @@ async function run() {
     }
   }
 
-  if (outFile) {
-    fs.writeFileSync(outFile, Array.from(diffs.values()).join("\n\n"));
+  if (patchFile) {
+    fs.writeFileSync(patchFile, Array.from(diffs.values()).join("\n\n"));
   }
 
   log("info", `Processed ${completedPaths.size} files`);
@@ -658,7 +658,7 @@ const formatFile = async (
     );
 
     if (diffs.has(absPath)) {
-      if (diffs.get(absPath) !== diff && outFile) {
+      if (diffs.get(absPath) !== diff && patchFile) {
         log(
           "warn",
           "Multiple diffs for the same file. This diff will not be in the generated file!",

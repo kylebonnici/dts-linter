@@ -48,7 +48,7 @@ dts-linter --formatFixAll
 | `--diagnostics`         | boolean         | `false`         | Show basic syntax diagnostics                                                                        |
 | `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --includes, --bindings for proper usage) |
 | `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                   |
-| `--outFile`             | string          | -               | Write formatting diff output to file                                                                 |
+| `--patchFile`           | string          | -               | Write formatting diff output to file                                                                 |
 | `--help`                | boolean         | `false`         | Show help information                                                                                |
 
 ### Examples
@@ -74,7 +74,7 @@ dts-linter --diagnosticsFull --includes ./include --bindings ./zephyr/dts/bindin
 #### Generate diff file for review
 
 ```bash
-dts-linter --format --outFile changes.patch
+dts-linter --format --patchFile changes.patch
 ```
 
 ## File Discovery
@@ -100,7 +100,7 @@ When running in CI environments (GitHub Actions, GitLab CI, etc.), the tool auto
 
 ### Diff Output
 
-When using `--outFile`, generates unified diff format showing all formatting changes:
+When using `--patchFile`, generates unified diff format showing all formatting changes:
 
 ```diff
 --- a/my-board.dts

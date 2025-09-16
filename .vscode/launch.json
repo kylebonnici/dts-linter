@@ -12,10 +12,10 @@
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
         "--format",
+        "--outputType",
+        "json",
         "--cwd",
-        "/Users/kylebonnici/workspace/personal/zephyr/dts/arm/nordic/",
-        "--files",
-        "/Users/kylebonnici/workspace/personal/zephyr/dts/vendor/nordic/nrf54l05.dtsi"
+        "/Users/kylebonnici/workspace/personal/zephyr/",
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
