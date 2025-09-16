@@ -46,7 +46,97 @@ function isGitCI(): boolean {
   );
 }
 
-const onGit = isGitCI();
+const schema = z.object({
+  files: z.array(z.string().optional()).optional(),
+  cwd: z.string().optional(),
+  includes: z.array(z.string()).optional().default([]),
+  bindings: z.array(z.string()).optional().default([]),
+  logLevel: z.enum(["none", "verbose"]).optional().default("none"),
+  format: z.boolean().optional().default(false),
+  formatFixAll: z.boolean().optional().default(false),
+  processIncludes: z.boolean().optional().default(false),
+  diagnostics: z.boolean().optional().default(false),
+  diagnosticsFull: z.boolean().optional().default(false),
+  showInfoDiagnostics: z.boolean().optional().default(false),
+  outFile: z.string().optional(),
+  annotate: z.boolean().optional().default(false),
+  help: z.boolean().optional().default(false),
+});
+type SchemaType = z.infer<typeof schema>;
+
+const helpString = `Usage: dts-linter [options]
+
+Options:
+  --files                           List of input files (can be repeated).
+  --cwd <path>                      Set the current working directory.
+  --includes                        Paths (absolute or relative to CWD) to resolve includes (default: []).
+  --bindings                        Zephyr binding root directories (default: []).
+  --logLevel <none|verbose>         Set the logging verbosity (default: none).
+  --format                          Format the files specified in --files (default: false).
+  --formatFixAll                    Apply formatting changes directly to the files (default: false).
+  --processIncludes                 Process includes for formatting or diagnostics (default: false).
+  --diagnostics                     Show basic syntax diagnostics for files (default: false).
+  --diagnosticsFull                 Show full diagnostics for files (default: false).
+  --showInfoDiagnostics             Show informaiton diagnostics
+  --outFile <path>                  Write formatting diff output to this file (optional).
+  --annotate                        Force output to be GitHub Actions-compatible annotations.
+  --help                            Show help information (default: false).
+
+Example:
+  dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
+
+let argv: SchemaType;
+try {
+  const { values } = parseArgs({
+    options: {
+      files: { type: "string", multiple: true },
+      cwd: { type: "string" },
+      includes: { type: "string", multiple: true },
+      bindings: { type: "string", multiple: true },
+      logLevel: { type: "string" },
+      format: { type: "boolean" },
+      formatFixAll: { type: "boolean" },
+      processIncludes: { type: "boolean" },
+      diagnostics: { type: "boolean" },
+      diagnosticsFull: { type: "boolean" },
+      showInfoDiagnostics: { type: "boolean" },
+      outFile: { type: "string" },
+      annotate: { type: "boolean" },
+      help: { type: "boolean" },
+    },
+    strict: true,
+  });
+
+  const safeParseData = schema.safeParse(values);
+  if (!safeParseData.success) {
+    console.log(helpString);
+    process.exit(1);
+  }
+  argv = safeParseData.data;
+} catch {
+  console.log(helpString);
+  process.exit(1);
+}
+
+if (argv.help) {
+  console.log("Invalid arguments");
+  console.log(helpString);
+  process.exit(0);
+}
+
+const includesPaths = argv.includes;
+const bindings = argv.bindings;
+const logLevel = argv.logLevel as LogLevel;
+const formatFixAll = argv.formatFixAll;
+const format = argv.format || formatFixAll;
+const diagnosticsFull = argv.diagnosticsFull;
+const diagnostics = argv.diagnostics || diagnosticsFull;
+const showInfoDiagnostics = argv.showInfoDiagnostics;
+const processIncludes = argv.processIncludes || diagnosticsFull;
+const annotate = argv.annotate;
+const outFile = argv.outFile;
+
+const onGit = isGitCI() || annotate;
 
 const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
@@ -116,92 +206,6 @@ const log = (
       .join(joinStr)}`
   );
 };
-
-const schema = z.object({
-  files: z.array(z.string().optional()).optional(),
-  cwd: z.string().optional(),
-  includes: z.array(z.string()).optional().default([]),
-  bindings: z.array(z.string()).optional().default([]),
-  logLevel: z.enum(["none", "verbose"]).optional().default("none"),
-  format: z.boolean().optional().default(false),
-  formatFixAll: z.boolean().optional().default(false),
-  processIncludes: z.boolean().optional().default(false),
-  diagnostics: z.boolean().optional().default(false),
-  diagnosticsFull: z.boolean().optional().default(false),
-  showInfoDiagnostics: z.boolean().optional().default(false),
-  outFile: z.string().optional(),
-  help: z.boolean().optional().default(false),
-});
-type SchemaType = z.infer<typeof schema>;
-
-const helpString = `Usage: dts-linter [options]
-
-Options:
-  --files                           List of input files (can be repeated).
-  --cwd <path>                      Set the current working directory.
-  --includes                        Paths (absolute or relative to CWD) to resolve includes (default: []).
-  --bindings                        Zephyr binding root directories (default: []).
-  --logLevel <none|verbose>         Set the logging verbosity (default: none).
-  --format                          Format the files specified in --files (default: false).
-  --formatFixAll                    Apply formatting changes directly to the files (default: false).
-  --processIncludes                 Process includes for formatting or diagnostics (default: false).
-  --diagnostics                     Show basic syntax diagnostics for files (default: false).
-  --diagnosticsFull                 Show full diagnostics for files (default: false).
-  --showInfoDiagnostics             Show informaiton diagnostics
-  --outFile <path>                  Write formatting diff output to this file (optional).
-  --help                            Show help information (default: false).
-
-Example:
-  dts-linter --files file1.dts --files file2.dtsi --format --diagnostics`;
-
-let argv: SchemaType;
-try {
-  const { values } = parseArgs({
-    options: {
-      files: { type: "string", multiple: true },
-      cwd: { type: "string" },
-      includes: { type: "string", multiple: true },
-      bindings: { type: "string", multiple: true },
-      logLevel: { type: "string" },
-      format: { type: "boolean" },
-      formatFixAll: { type: "boolean" },
-      processIncludes: { type: "boolean" },
-      diagnostics: { type: "boolean" },
-      diagnosticsFull: { type: "boolean" },
-      showInfoDiagnostics: { type: "boolean" },
-      outFile: { type: "string" },
-      help: { type: "boolean" },
-    },
-    strict: true,
-  });
-
-  const safeParseData = schema.safeParse(values);
-  if (!safeParseData.success) {
-    console.log(helpString);
-    process.exit(1);
-  }
-  argv = safeParseData.data;
-} catch {
-  console.log(helpString);
-  process.exit(1);
-}
-
-if (argv.help) {
-  console.log("Invalid arguments");
-  console.log(helpString);
-  process.exit(0);
-}
-
-const includesPaths = argv.includes;
-const bindings = argv.bindings;
-const logLevel = argv.logLevel as LogLevel;
-const formatFixAll = argv.formatFixAll;
-const format = argv.format || formatFixAll;
-const diagnosticsFull = argv.diagnosticsFull;
-const diagnostics = argv.diagnostics || diagnosticsFull;
-const showInfoDiagnostics = argv.showInfoDiagnostics;
-const processIncludes = argv.processIncludes || diagnosticsFull;
-const outFile = argv.outFile;
 
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
