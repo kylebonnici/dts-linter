@@ -59,7 +59,7 @@ const schema = z.object({
   diagnosticsFull: z.boolean().optional().default(false),
   showInfoDiagnostics: z.boolean().optional().default(false),
   outFile: z.string().optional(),
-  outputType: z
+  outputFormat: z
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
     .default("auto"),
@@ -104,7 +104,7 @@ try {
       diagnosticsFull: { type: "boolean" },
       showInfoDiagnostics: { type: "boolean" },
       outFile: { type: "string" },
-      outputType: { type: "string" },
+      outputFormat: { type: "string" },
       help: { type: "boolean" },
     },
     strict: true,
@@ -136,11 +136,11 @@ const diagnosticsFull = argv.diagnosticsFull;
 const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes || diagnosticsFull;
-const outputType = argv.outputType;
+const outputFormat = argv.outputFormat;
 const outFile = argv.outFile;
 
 const onGit =
-  (isGitCI() && outputType === "auto") || outputType === "annotations";
+  (isGitCI() && outputFormat === "auto") || outputFormat === "annotations";
 
 const grpStart = () => (onGit ? "::group::" : "");
 const grpEnd = () => (onGit ? "::endgroup::" : "");
@@ -175,7 +175,7 @@ const log = (
   indent?: string,
   progressString?: string
 ) => {
-  if (outputType === "json") {
+  if (outputFormat === "json") {
     console.log(
       JSON.stringify({
         level,
@@ -230,7 +230,7 @@ const log = (
 type LogLevel = "none" | "verbose";
 const cwd = argv.cwd ?? process.cwd();
 if (!argv.files) {
-  console.log(`Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
+  log("info", `Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
   argv.files = globSync(
     diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
     {
@@ -301,7 +301,7 @@ async function run() {
       };
 
       const level = levelMap[params.type as number] || "LOG";
-      console.log(`[LSP ${level}] ${params.message}`);
+      log("info", `[LSP ${level}] ${params.message}`);
     });
   }
 
@@ -554,7 +554,7 @@ async function run() {
   }
 
   if (diagnosticIssues.size) {
-    if (!onGit) {
+    if (outputFormat === "pretty" || (outputFormat === "auto" && !onGit)) {
       console.log("Diagnostic issues summary");
 
       console.log(
