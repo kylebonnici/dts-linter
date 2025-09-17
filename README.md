@@ -35,22 +35,22 @@ dts-linter --formatFixAll
 
 ### Command Line Options
 
-| Option                  | Type            | Default         | Description                                                                                          |
-| ----------------------- | --------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
-| `--file`                | string          | Auto-discover   | List of input files (can be repeated)                                                                |
-| `--cwd`                 | string          | `process.cwd()` | Set the current working directory                                                                    |
-| `--include`             | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                             |
-| `--binding`             | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                       |
-| `--logLevel`            | `none\|verbose` | `none`          | Set the logging verbosity                                                                            |
-| `--format`              | boolean         | `false`         | Format the specified files (automatically set to true when formatFixAll)                             |
-| `--formatFixAll`        | boolean         | `false`         | Apply formatting changes directly to files                                                           |
-| `--processIncludes`     | boolean         | `false`         | Process includes for formatting or diagnostics (automatically set to true when diagnosticsFull)      |
-| `--diagnostics`         | boolean         | `false`         | Show basic syntax diagnostics                                                                        |
-| `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --include, --binding for proper usage)   |
-| `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                   |
-| `--patchFile`           | string          | -               | Write formatting diff output to file                                                                 |
-| `--outputType`          | string          | `auto`          | Output format type: auto, pretty, annotations, or json                                               |
-| `--help`                | boolean         | `false`         | Show help information                                                                                |
+| Option                  | Type            | Default         | Description                                                                                        |
+| ----------------------- | --------------- | --------------- | -------------------------------------------------------------------------------------------------- |
+| `--file`                | string          | Auto-discover   | List of input files (can be repeated)                                                              |
+| `--cwd`                 | string          | `process.cwd()` | Set the current working directory                                                                  |
+| `--include`             | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                           |
+| `--binding`             | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                     |
+| `--logLevel`            | `none\|verbose` | `none`          | Set the logging verbosity                                                                          |
+| `--format`              | boolean         | `false`         | Format the specified files (automatically set to true when formatFixAll)                           |
+| `--formatFixAll`        | boolean         | `false`         | Apply formatting changes directly to files                                                         |
+| `--processIncludes`     | boolean         | `false`         | Process includes for formatting or diagnostics (automatically set to true when diagnosticsFull)    |
+| `--diagnostics`         | boolean         | `false`         | Show basic syntax diagnostics                                                                      |
+| `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --include, --binding for proper usage) |
+| `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                 |
+| `--patchFile`           | string          | -               | Write formatting diff output to file                                                               |
+| `--outputType`          | string          | `auto`          | Output format type: auto, pretty, annotations, or json                                             |
+| `--help`                | boolean         | `false`         | Show help information                                                                              |
 
 ### Examples
 
@@ -101,7 +101,7 @@ When running in CI environments (GitHub Actions, GitLab CI, etc.), the tool auto
 
 ### JSON
 
-Returns a JSON object of type 
+Returns a JSON object of type
 
 ```typescript
 {

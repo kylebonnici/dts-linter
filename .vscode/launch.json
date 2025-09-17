@@ -12,10 +12,13 @@
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
         "--format",
-        "--outputType",
+
+        "--outputFormat",
         "json",
-        "--cwd",
-        "/Users/kylebonnici/workspace/personal/zephyr/",
+        "--patchFile",
+        "dts_linter.patch",
+        "--file",
+        "/Users/kylebonnici/workspace/personal/zephyr/samples/net/openthread/coprocessor/boards/tlsr9518adk80d.overlay",
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
