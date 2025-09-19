@@ -82,7 +82,7 @@ Options:
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --showInfoDiagnostics                           Show information diagnostics
   --patchFile <path>                              Write formatting diff output to this file (optional).
-  --outputType <auto|pretty|annotations|json>     stdout output type.
+  --outputFormat <auto|pretty|annotations|json>     stdout output type.
   --help                                          Show help information (default: false).
 
 Example:
