@@ -179,7 +179,7 @@ const log = (
     jsonOut.issues.push({
       level,
       message: message.trim(),
-      file: fileName?.trim(),
+      file: fileName ? relative(cwd, fileName.trim()) : undefined,
       title: titleStr?.trim(),
       startLine: start?.line,
       startCol: start?.col,
