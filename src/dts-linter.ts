@@ -178,9 +178,9 @@ const log = (
   if (outputFormat === "json") {
     jsonOut.issues.push({
       level,
-      message,
-      file: fileName,
-      title: titleStr,
+      message: message.trim(),
+      file: fileName?.trim(),
+      title: titleStr?.trim(),
       startLine: start?.line,
       startCol: start?.col,
       endLine: end?.line,
@@ -430,26 +430,46 @@ async function run() {
               file: f,
               context,
             });
-            const message =
-              (e?.data as Diagnostic[] | undefined)
-                ?.map(
-                  (issue) =>
-                    `[${diagnosticSeverityToString(issue.severity)}] ${
-                      issue.message
-                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
-                      issue.range.end
-                    )}`
-                )
-                .join("\n\t\t") ?? "";
-            log(
-              "error",
-              `\n\t\t${message}`,
-              f,
-              "Synatx error.",
-              undefined,
-              undefined,
-              indent
-            );
+
+            if (outputFormat === "json") {
+              (e?.data as Diagnostic[] | undefined)?.map((issue) => {
+                log(
+                  "error",
+                  issue.message,
+                  f,
+                  "Synatx error.",
+                  {
+                    line: issue.range.start.line + 1,
+                    col: issue.range.start.character,
+                  },
+                  {
+                    line: issue.range.end.line + 1,
+                    col: issue.range.end.character,
+                  }
+                );
+              });
+            } else {
+              const message =
+                (e?.data as Diagnostic[] | undefined)
+                  ?.map(
+                    (issue) =>
+                      `[${diagnosticSeverityToString(issue.severity)}] ${
+                        issue.message
+                      }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                        issue.range.end
+                      )}`
+                  )
+                  .join("\n\t\t") ?? "";
+              log(
+                "error",
+                `\n\t\t${message}`,
+                f,
+                "Synatx error.",
+                undefined,
+                undefined,
+                indent
+              );
+            }
           }
 
           completedPaths.add(f);
@@ -466,7 +486,8 @@ async function run() {
               connection,
               f,
               mainFile,
-              progressString(mainFile, j)
+              progressString(mainFile, j),
+              relative(cwd, filePath)
             );
             if (issues?.length) {
               if (!diagnosticIssues.has(f)) {
@@ -716,8 +737,9 @@ let skippedDiagnosticChecks = new Set<string>();
 const fileDiagnosticIssues = async (
   connection: MessageConnection,
   absPath: string,
-  mainFile: boolean,
-  progressString: string
+  isMainFile: boolean,
+  progressString: string,
+  mainFile: string
 ) => {
   processedDiagnosticChecks.add(absPath);
   const issues = (
@@ -732,7 +754,7 @@ const fileDiagnosticIssues = async (
       (issue.severity === DiagnosticSeverity.Information && showInfoDiagnostics)
   );
 
-  const indent = mainFile ? "" : "\t";
+  const indent = isMainFile ? "" : "\t";
 
   if (issues.length) {
     issues.forEach((issue, i) =>
@@ -742,8 +764,14 @@ const fileDiagnosticIssues = async (
           : issue.severity === DiagnosticSeverity.Warning
           ? "warn"
           : "warn",
-        issue.message,
-        onGit ? absPath : i ? "\t" : `${absPath}\n${indent}\t`,
+        outputFormat === "json"
+          ? `Board File: ${mainFile}: ${issue.message}`
+          : issue.message,
+        onGit || outputFormat === "json"
+          ? absPath
+          : i
+          ? "\t"
+          : `${absPath}\n${indent}\t`,
         undefined,
         {
           line: issue.range.start.line + 1,
