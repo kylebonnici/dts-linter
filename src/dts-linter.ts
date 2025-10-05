@@ -130,8 +130,9 @@ if (argv.help) {
   process.exit(0);
 }
 
+import pkg from "../package.json";
+
 if (argv.version) {
-  const pkg = require("../package.json");
   console.log(`${pkg.name} version ${pkg.version}`);
   process.exit(0);
 }
