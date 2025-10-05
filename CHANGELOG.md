@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - `--outputType` Flag to configure output type. Defaults to auto.
+- `--version` Flag to return the version of the dts-linter.
 
 ### Changed
 

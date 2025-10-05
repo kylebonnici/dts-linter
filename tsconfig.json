@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "target": "es2021",
-    "module": "commonjs",
+    "resolveJsonModule":true,
+    "module": "nodenext",
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",

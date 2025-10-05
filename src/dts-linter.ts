@@ -63,6 +63,7 @@ const schema = z.object({
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
     .default("auto"),
+  version: z.boolean().optional().default(false),
   help: z.boolean().optional().default(false),
 });
 type SchemaType = z.infer<typeof schema>;
@@ -82,7 +83,8 @@ Options:
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --showInfoDiagnostics                           Show information diagnostics
   --patchFile <path>                              Write formatting diff output to this file (optional).
-  --outputFormat <auto|pretty|annotations|json>     stdout output type.
+  --outputFormat <auto|pretty|annotations|json>   stdout output type.
+  --version                                       Show version information (default: false).
   --help                                          Show help information (default: false).
 
 Example:
@@ -105,6 +107,7 @@ try {
       showInfoDiagnostics: { type: "boolean" },
       patchFile: { type: "string" },
       outputFormat: { type: "string" },
+      version: { type: "boolean" },
       help: { type: "boolean" },
     },
     strict: true,
@@ -124,6 +127,13 @@ try {
 if (argv.help) {
   console.log("Invalid arguments");
   console.log(helpString);
+  process.exit(0);
+}
+
+import pkg from "../package.json";
+
+if (argv.version) {
+  console.log(`${pkg.name} version ${pkg.version}`);
   process.exit(0);
 }
 
