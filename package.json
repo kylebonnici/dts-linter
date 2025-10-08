@@ -33,6 +33,7 @@
     "diff": "^8.0.2",
     "esbuild": "^0.25.5",
     "glob": "^11.0.3",
+    "license-checker": "^25.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
     "vscode-jsonrpc": "^8.2.1",

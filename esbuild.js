@@ -40,6 +40,7 @@ const blacklist = [
   'ts-node',
   'typescript',
   'vscode-languageserver-types',
+  'license-checker'
 	// Add more packages here if needed
 ];
 
