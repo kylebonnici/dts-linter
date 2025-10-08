@@ -6,18 +6,18 @@ import fs, { existsSync } from "fs";
 import path from "path";
 import { createMessageConnection, MessageConnection } from "vscode-jsonrpc";
 import { StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
-import {
-  TextDocumentItem,
-  DocumentFormattingParams,
-  Diagnostic,
-  DiagnosticSeverity,
-} from "vscode-languageserver-protocol";
 
 import { z } from "zod";
 import { parseArgs } from "node:util";
 import { relative, resolve } from "node:path";
 import { applyPatch, createPatch } from "diff";
 import { globSync } from "glob";
+import pkg from "../package.json";
+import {
+  Diagnostic,
+  DiagnosticSeverity,
+  TextDocumentItem,
+} from "vscode-languageserver-types";
 
 const serverPath = require.resolve("devicetree-language-server/dist/server.js");
 
@@ -128,8 +128,6 @@ if (argv.help) {
   console.log(helpString);
   process.exit(0);
 }
-
-import pkg from "../package.json";
 
 if (argv.version) {
   console.log(`${pkg.name} version ${pkg.version}`);
@@ -703,7 +701,7 @@ const formatFile = async (
   originalText: string,
   context?: ContextListItem
 ) => {
-  const params: DocumentFormattingParams & { text?: string } = {
+  const params = {
     textDocument: {
       uri: `file://${absPath}`,
     },
