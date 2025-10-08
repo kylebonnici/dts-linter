@@ -17,7 +17,6 @@ import { z } from "zod";
 import { parseArgs } from "node:util";
 import { relative, resolve } from "node:path";
 import { applyPatch, createPatch } from "diff";
-import * as core from "@actions/core";
 import { globSync } from "glob";
 
 const serverPath = require.resolve("devicetree-language-server/dist/server.js");
@@ -168,6 +167,42 @@ const endMsg = (line: number, col?: number) =>
 
 const joinStr = onGit ? "," : " ";
 
+type Level = "warn" | "error" | "info";
+const levelToGitAnnotation = (level: Level) => {
+  switch (level) {
+    case "error":
+      return "::error";
+    case "warn":
+      return "::warning";
+    case "info":
+      return "::notice";
+  }
+};
+
+const gitAnnotation = (
+  level: Level,
+  message: string,
+  fileName?: string,
+  titleStr?: string,
+
+  start?: {
+    col?: number;
+    line: number;
+  },
+  end?: {
+    col?: number;
+    line: number;
+  }
+) => {
+  console.log(
+    `${levelToGitAnnotation(level)} ${fileName ? `file=${fileName},` : ""}${
+      start ? `line=${start.line},` : ""
+    }${start?.col ? `col=${start.col},` : ""}${end ? `line=${end.line},` : ""}${
+      end?.col ? `col=${end.col},` : ""
+    }${titleStr ? `title=${titleStr}` : ""}::${message}`
+  );
+};
+
 const log = (
   level: "warn" | "error" | "info",
   message: string,
@@ -200,19 +235,14 @@ const log = (
   }
 
   if (onGit) {
-    if (level === "info") {
-      core.info(message);
-    } else {
-      const action = level === "error" ? core.error : core.warning;
-      action(message, {
-        file: fileName ? relative(cwd, fileName) : undefined,
-        startLine: start?.line,
-        startColumn: start?.col,
-        endLine: end?.line,
-        endColumn: end?.col,
-        title: titleStr,
-      });
-    }
+    gitAnnotation(
+      level,
+      message,
+      fileName ? relative(cwd, fileName) : undefined,
+      titleStr,
+      start,
+      end
+    );
     return;
   }
 

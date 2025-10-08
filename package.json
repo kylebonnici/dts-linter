@@ -27,7 +27,6 @@
     "devicetree-language-server": "^0.5.5"
   },
   "devDependencies": {
-    "@actions/core": "^1.11.1",
     "@types/node": "^24.0.3",
     "devicetree-language-server-types": "^0.0.2-alpha.8",
     "diff": "^8.0.2",
