@@ -12,7 +12,8 @@
   },
   "bin": "./dist/dts-linter.js",
   "files": [
-    "dist/**"
+    "dist/dts-linter.js",
+    "THIRD_PARTY_LICENSES.txt"
   ],
   "keywords": [
     "dts",
