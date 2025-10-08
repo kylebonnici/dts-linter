@@ -12,16 +12,14 @@
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
         "--format",
-
         "--outputFormat",
         "json",
-        "--patchFile",
-        "dts_linter.patch",
+        "--cwd",
+        "/Users/kylebonnici/workspace/personal/zephyr/",
         "--file",
-        "/Users/kylebonnici/workspace/personal/zephyr/samples/net/openthread/coprocessor/boards/tlsr9518adk80d.overlay",
+        "/Users/kylebonnici/workspace/personal/zephyr/boards/nordic/nrf54l15dk/nrf54l15dk_nrf54l15_cpuapp.dts",
       ],
       "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "sourceMaps": true,
       "skipFiles": ["<node_internals>/**"]
