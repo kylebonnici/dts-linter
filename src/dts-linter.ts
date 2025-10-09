@@ -709,6 +709,8 @@ const formatFile = async (
       tabSize: 8,
       insertSpaces: false,
       trimTrailingWhitespace: true,
+      insertFinalNewline: true,
+      trimFinalNewlines: true,
     },
     text: originalText,
   };
