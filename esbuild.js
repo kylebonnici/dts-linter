@@ -78,9 +78,7 @@ function generateLicensesWithTempDeps() {
 	} finally {
 		// 3. Restore original package.json
     pkg.dependencies = prevDependecies;
-    console.log(JSON.stringify(prevDependecies));
-		Object.assign(pkg.dependencies, prevDependecies); // Restore prev temporary dependencies
-    console.log(JSON.stringify(pkg.dependencies))
+		Object.assign(pkg.dependencies, prevDependecies); // Restore prev temporary dependencies  
 		fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
 	}
 
