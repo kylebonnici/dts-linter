@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.3.0] - Unreleased
 
+### Added
+
+- `--threads` Flag to process files in parallel. Default is 1
+
 ### Changed
 
 - Renamed `--outputType` flag to `--outputFormat`

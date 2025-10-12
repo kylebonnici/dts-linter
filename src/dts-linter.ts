@@ -21,6 +21,144 @@ import {
 
 const serverPath = require.resolve("devicetree-language-server/dist/server.js");
 
+interface LSPWorker {
+  id: number;
+  process: cp.ChildProcess;
+  connection: MessageConnection;
+  busy: boolean;
+}
+
+class LSPWorkerPool {
+  private workers: LSPWorker[] = [];
+  private queue: Array<() => void> = [];
+
+  constructor(
+    private poolSize: number,
+    private cwd: string,
+    private includesPaths: string[],
+    private bindings: string[],
+    private logLevel: LogLevel
+  ) {}
+
+  async initialize(): Promise<void> {
+    const initPromises = [];
+    for (let i = 0; i < this.poolSize; i++) {
+      initPromises.push(this.createWorker(i));
+    }
+    await Promise.all(initPromises);
+  }
+
+  private async createWorker(id: number): Promise<void> {
+    const lspProcess = cp.spawn(serverPath, ["--stdio"], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    lspProcess.stderr.on("data", (chunk) => {
+      if (this.logLevel === "verbose") {
+        console.error(`LSP Worker ${id} stderr:`, chunk.toString());
+      }
+    });
+
+    const connection = createMessageConnection(
+      new StreamMessageReader(lspProcess.stdout),
+      new StreamMessageWriter(lspProcess.stdin)
+    );
+
+    if (this.logLevel === "verbose") {
+      connection.onNotification("window/logMessage", (params) => {
+        const levelMap: Record<number, string> = {
+          1: "ERROR",
+          2: "WARN",
+          3: "INFO",
+          4: "LOG",
+        };
+
+        const level = levelMap[params.type as number] || "LOG";
+        log("info", `[LSP Worker ${id} ${level}] ${params.message}`);
+      });
+    }
+
+    connection.onRequest("workspace/workspaceFolders", () => {
+      return [
+        {
+          uri: `file://${this.cwd}`,
+          name: "root",
+        },
+      ];
+    });
+
+    connection.listen();
+
+    connection.sendNotification("workspace/didChangeConfiguration", {
+      settings: {
+        devicetree: {
+          defaultIncludePaths: this.includesPaths,
+          defaultBindingType: "Zephyr",
+          defaultZephyrBindings: this.bindings,
+          cwd: this.cwd,
+          autoChangeContext: true,
+          allowAdhocContexts: true,
+          defaultLockRenameEdits: [],
+        },
+      },
+    });
+
+    const workspaceFolders = [{ uri: toFileUri(this.cwd), name: "root" }];
+
+    await connection.sendRequest("initialize", {
+      processId: process.pid,
+      rootUri: toFileUri(this.cwd),
+      capabilities: {},
+      workspaceFolders,
+    });
+
+    await connection.sendNotification("initialized");
+
+    const worker: LSPWorker = {
+      id,
+      process: lspProcess,
+      connection,
+      busy: false,
+    };
+
+    this.workers.push(worker);
+  }
+
+  async getAvailableWorker(): Promise<LSPWorker> {
+    return new Promise((resolve) => {
+      const availableWorker = this.workers.find((w) => !w.busy);
+      if (availableWorker) {
+        availableWorker.busy = true;
+        resolve(availableWorker);
+      } else {
+        this.queue.push(() => {
+          const worker = this.workers.find((w) => !w.busy);
+          if (worker) {
+            worker.busy = true;
+            resolve(worker);
+          }
+        });
+      }
+    });
+  }
+
+  releaseWorker(worker: LSPWorker): void {
+    worker.busy = false;
+    const nextTask = this.queue.shift();
+    if (nextTask) {
+      nextTask();
+    }
+  }
+
+  async dispose(): Promise<void> {
+    for (const worker of this.workers) {
+      worker.connection.dispose();
+      worker.process.kill();
+    }
+    this.workers = [];
+  }
+}
+
 function toFileUri(filePath: string): string {
   let resolvedPath = path.resolve(filePath);
   // On Windows, convert backslashes to forward slashes
@@ -62,6 +200,7 @@ const schema = z.object({
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
     .default("auto"),
+  threads: z.number().int().min(1).optional().default(1),
   version: z.boolean().optional().default(false),
   help: z.boolean().optional().default(false),
 });
@@ -83,11 +222,12 @@ Options:
   --showInfoDiagnostics                           Show information diagnostics
   --patchFile <path>                              Write formatting diff output to this file (optional).
   --outputFormat <auto|pretty|annotations|json>   stdout output type.
+  --threads <number>                              Number of parallel LSP instances to use (default: 1).
   --version                                       Show version information (default: false).
   --help                                          Show help information (default: false).
 
 Example:
-  dts-linter --file file1.dts --file file2.dtsi --format --diagnostics`;
+  dts-linter --file file1.dts --file file2.dtsi --format --diagnostics --threads 4`;
 
 let argv: SchemaType;
 try {
@@ -106,13 +246,20 @@ try {
       showInfoDiagnostics: { type: "boolean" },
       patchFile: { type: "string" },
       outputFormat: { type: "string" },
+      threads: { type: "string" },
       version: { type: "boolean" },
       help: { type: "boolean" },
     },
     strict: true,
   });
 
-  const safeParseData = schema.safeParse(values);
+  // Convert threads string to number if provided
+  const processedValues = {
+    ...values,
+    threads: values.threads ? parseInt(values.threads, 10) : undefined,
+  };
+
+  const safeParseData = schema.safeParse(processedValues);
   if (!safeParseData.success) {
     console.log(helpString);
     process.exit(1);
@@ -145,6 +292,7 @@ const showInfoDiagnostics = argv.showInfoDiagnostics;
 const processIncludes = argv.processIncludes || diagnosticsFull;
 const outputFormat = argv.outputFormat;
 const patchFile = argv.patchFile;
+const threads = argv.threads;
 
 const onGit =
   (isGitCI() && outputFormat === "auto") || outputFormat === "annotations";
@@ -308,6 +456,8 @@ let diagnosticIssues = new Map<
     context: ContextListItem;
   }[]
 >();
+const completedPaths = new Set<string>();
+const diffApplied = new Set<string>();
 
 run().catch((err) => {
   console.error("Error validating files:", err);
@@ -329,73 +479,212 @@ const diagnosticSeverityToString = (
   }
 };
 
-async function run() {
-  const lspProcess = cp.spawn(serverPath, ["--stdio"], {
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+async function processFileWithWorker(
+  worker: LSPWorker,
+  filePath: string,
+  fileIndex: number,
+  totalFiles: number
+): Promise<void> {
+  const text = fs.readFileSync(filePath, "utf8");
 
-  lspProcess.stderr.on("data", (chunk) => {
-    console.error("LSP stderr:", chunk.toString());
-  });
+  const textDocument: TextDocumentItem = {
+    uri: toFileUri(filePath),
+    languageId: "devicetree",
+    version: 0,
+    text,
+  };
 
-  const connection = createMessageConnection(
-    new StreamMessageReader(lspProcess.stdout),
-    new StreamMessageWriter(lspProcess.stdin)
-  );
+  let files = [filePath];
+  let context: ContextListItem | undefined;
 
-  if (logLevel === "verbose") {
-    connection.onNotification("window/logMessage", (params) => {
-      const levelMap: Record<number, string> = {
-        1: "ERROR",
-        2: "WARN",
-        3: "INFO",
-        4: "LOG",
-      };
-
-      const level = levelMap[params.type as number] || "LOG";
-      log("info", `[LSP ${level}] ${params.message}`);
+  if (diagnostics || processIncludes) {
+    worker.connection.sendNotification("textDocument/didOpen", {
+      textDocument,
     });
+
+    context = await waitForNewActiveContext(worker.connection);
+    files = [
+      ...flatFileTree(context.mainDtsPath),
+      ...context.overlays.flatMap(flatFileTree),
+    ].filter(
+      (f) =>
+        !f.endsWith(".h") &&
+        existsSync(f) &&
+        (processIncludes || filePaths.includes(f))
+    );
   }
 
-  connection.onRequest("workspace/workspaceFolders", () => {
-    // Return workspace folders your client is aware of
-    return [
-      {
-        uri: `file://${cwd}`,
-        name: "root",
+  const isMainFile = (f: string) => f === filePath;
+  const progressString = (isMainFile: boolean, j: number) =>
+    isMainFile
+      ? `[${fileIndex}/${totalFiles}]`
+      : `[${j}/${files.length - 1}]`.padEnd(
+          (files.length - 1).toString().length * 2 + 3,
+          " "
+        );
+
+  if (format) {
+    await Promise.all(
+      files.map(async (f, j) => {
+        const mainFile = isMainFile(f);
+        const indent = progressString(mainFile, j);
+
+        try {
+          await formatFile(
+            worker.connection,
+            f,
+            mainFile,
+            indent,
+            mainFile ? text : fs.readFileSync(f, "utf8"),
+            context
+          );
+        } catch (e: any) {
+          formattingErrors.push({
+            file: f,
+            context,
+          });
+
+          if (outputFormat === "json") {
+            (e?.data as Diagnostic[] | undefined)?.map((issue) => {
+              log(
+                "error",
+                issue.message,
+                f,
+                "Synatx error.",
+                {
+                  line: issue.range.start.line + 1,
+                  col: issue.range.start.character,
+                },
+                {
+                  line: issue.range.end.line + 1,
+                  col: issue.range.end.character,
+                }
+              );
+            });
+          } else {
+            const message =
+              (e?.data as Diagnostic[] | undefined)
+                ?.map(
+                  (issue) =>
+                    `[${diagnosticSeverityToString(issue.severity)}] ${
+                      issue.message
+                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                      issue.range.end
+                    )}`
+                )
+                .join("\n\t\t") ?? "";
+            log(
+              "error",
+              `\n\t\t${message}`,
+              f,
+              "Synatx error.",
+              undefined,
+              undefined,
+              indent
+            );
+          }
+        }
+
+        completedPaths.add(f);
+      })
+    );
+  }
+
+  if (diagnostics && context) {
+    await Promise.all(
+      files.map(async (f, j) => {
+        const mainFile = isMainFile(f);
+        if (filePath.endsWith(".dts") || !diagnosticsFull) {
+          const issues = await fileDiagnosticIssues(
+            worker.connection,
+            f,
+            mainFile,
+            progressString(mainFile, j),
+            relative(cwd, filePath)
+          );
+          if (issues?.length) {
+            if (!diagnosticIssues.has(f)) {
+              diagnosticIssues.set(f, []);
+            }
+            diagnosticIssues.get(f)?.push({
+              maxSeverity: issues.reduce(
+                (p, c) =>
+                  (c.severity ?? DiagnosticSeverity.Hint) < p
+                    ? c.severity ?? DiagnosticSeverity.Hint
+                    : p,
+                DiagnosticSeverity.Hint as DiagnosticSeverity
+              ),
+              context,
+              message: issues
+                .map(
+                  (issue) =>
+                    `[${diagnosticSeverityToString(issue.severity)}] ${
+                      issue.message
+                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                      issue.range.end
+                    )}`
+                )
+                .join("\n\t\t"),
+            });
+          }
+        } else {
+          skippedDiagnosticChecks.add(f);
+          log(
+            "warn",
+            "Check can only be done on full context!",
+            f,
+            undefined,
+            undefined,
+            undefined,
+            `${mainFile ? "" : "\t"}`,
+            progressString(mainFile, j)
+          );
+        }
+
+        completedPaths.add(f);
+      })
+    );
+  }
+
+  if (diagnostics || processIncludes) {
+    worker.connection.sendNotification("textDocument/didClose", {
+      textDocument: {
+        uri: `file://${filePath}`,
       },
-    ];
-  });
+    });
 
-  connection.listen();
+    await waitForNewContextDeleted(worker.connection);
+  }
 
-  connection.sendNotification("workspace/didChangeConfiguration", {
-    settings: {
-      devicetree: {
-        defaultIncludePaths: includesPaths,
-        defaultBindingType: "Zephyr",
-        defaultZephyrBindings: bindings,
-        cwd,
-        autoChangeContext: true,
-        allowAdhocContexts: true,
-        defaultLockRenameEdits: [],
-      },
-    },
-  });
+  if (formatFixAll) {
+    files
+      .filter((f) => !diffApplied.has(f))
+      .forEach((f) => {
+        const diff = diffs.get(f);
+        if (diff) {
+          const result = applyPatch(fs.readFileSync(f, "utf8"), diff);
+          if (result) {
+            diffApplied.add(f);
+            fs.writeFileSync(f, result, "utf8");
+            formattingApplied.push({ file: f, context });
+          } else {
+            log("error", "Failed to apply changes to file", f);
+          }
+        }
+      });
+  }
+}
 
-  const workspaceFolders = [{ uri: toFileUri(cwd), name: "root" }];
+async function run() {
+  const workerPool = new LSPWorkerPool(
+    threads,
+    cwd,
+    includesPaths,
+    bindings,
+    logLevel
+  );
 
-  await connection.sendRequest("initialize", {
-    processId: process.pid,
-    rootUri: toFileUri(cwd),
-    capabilities: {},
-    workspaceFolders,
-  });
-
-  await connection.sendNotification("initialized");
-
-  const completedPaths = new Set<string>();
-  const diffApplied = new Set<string>();
+  await workerPool.initialize();
 
   const paths = Array.from(new Set(filePaths)).sort((a, b) => {
     const getPriority = (file: string): number => {
@@ -408,204 +697,27 @@ async function run() {
     return getPriority(a) - getPriority(b);
   });
 
-  for (const filePath of paths) {
-    i++;
-    const text = fs.readFileSync(filePath, "utf8");
+  // Process files in parallel using the worker pool
+  const fileProcessingPromises = paths.map(async (filePath, index) => {
+    const worker = await workerPool.getAvailableWorker();
 
-    const textDocument: TextDocumentItem = {
-      uri: toFileUri(filePath),
-      languageId: "devicetree",
-      version: 0,
-      text,
-    };
+    await processFileWithWorker(
+      worker,
+      filePath,
+      index + 1,
+      paths.length
+    ).finally(() => {
+      workerPool.releaseWorker(worker);
+    });
+  });
 
-    let files = [filePath];
-    let context: ContextListItem | undefined;
-
-    if (diagnostics || processIncludes) {
-      connection.sendNotification("textDocument/didOpen", {
-        textDocument,
-      });
-
-      context = await waitForNewActiveContext(connection);
-      files = [
-        ...flatFileTree(context.mainDtsPath),
-        ...context.overlays.flatMap(flatFileTree),
-      ].filter(
-        (f) =>
-          !f.endsWith(".h") &&
-          existsSync(f) &&
-          (processIncludes || paths.includes(f))
-      );
-    }
-
-    const isMainFile = (f: string) => f === filePath;
-    const progressString = (isMainFile: boolean, j: number) =>
-      isMainFile
-        ? `[${i}/${total}]`
-        : `[${j}/${files.length - 1}]`.padEnd(
-            (files.length - 1).toString().length * 2 + 3,
-            " "
-          );
-
-    if (format) {
-      await Promise.all(
-        files.map(async (f, j) => {
-          const mainFile = isMainFile(f);
-          const indent = progressString(mainFile, j);
-
-          try {
-            await formatFile(
-              connection,
-              f,
-              mainFile,
-              indent,
-              mainFile ? text : fs.readFileSync(f, "utf8"),
-              context
-            );
-          } catch (e: any) {
-            formattingErrors.push({
-              file: f,
-              context,
-            });
-
-            if (outputFormat === "json") {
-              (e?.data as Diagnostic[] | undefined)?.map((issue) => {
-                log(
-                  "error",
-                  issue.message,
-                  f,
-                  "Synatx error.",
-                  {
-                    line: issue.range.start.line + 1,
-                    col: issue.range.start.character,
-                  },
-                  {
-                    line: issue.range.end.line + 1,
-                    col: issue.range.end.character,
-                  }
-                );
-              });
-            } else {
-              const message =
-                (e?.data as Diagnostic[] | undefined)
-                  ?.map(
-                    (issue) =>
-                      `[${diagnosticSeverityToString(issue.severity)}] ${
-                        issue.message
-                      }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
-                        issue.range.end
-                      )}`
-                  )
-                  .join("\n\t\t") ?? "";
-              log(
-                "error",
-                `\n\t\t${message}`,
-                f,
-                "Synatx error.",
-                undefined,
-                undefined,
-                indent
-              );
-            }
-          }
-
-          completedPaths.add(f);
-        })
-      );
-    }
-
-    if (diagnostics && context) {
-      await Promise.all(
-        files.map(async (f, j) => {
-          const mainFile = isMainFile(f);
-          if (filePath.endsWith(".dts") || !diagnosticsFull) {
-            const issues = await fileDiagnosticIssues(
-              connection,
-              f,
-              mainFile,
-              progressString(mainFile, j),
-              relative(cwd, filePath)
-            );
-            if (issues?.length) {
-              if (!diagnosticIssues.has(f)) {
-                diagnosticIssues.set(f, []);
-              }
-              diagnosticIssues.get(f)?.push({
-                maxSeverity: issues.reduce(
-                  (p, c) =>
-                    (c.severity ?? DiagnosticSeverity.Hint) < p
-                      ? c.severity ?? DiagnosticSeverity.Hint
-                      : p,
-                  DiagnosticSeverity.Hint as DiagnosticSeverity
-                ),
-                context,
-                message: issues
-                  .map(
-                    (issue) =>
-                      `[${diagnosticSeverityToString(issue.severity)}] ${
-                        issue.message
-                      }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
-                        issue.range.end
-                      )}`
-                  )
-                  .join("\n\t\t"),
-              });
-            }
-          } else {
-            skippedDiagnosticChecks.add(f);
-            log(
-              "warn",
-              "Check can only be done on full context!",
-              f,
-              undefined,
-              undefined,
-              undefined,
-              `${mainFile ? "" : "\t"}`,
-              progressString(mainFile, j)
-            );
-          }
-
-          completedPaths.add(f);
-        })
-      );
-    }
-
-    if (diagnostics || processIncludes) {
-      connection.sendNotification("textDocument/didClose", {
-        textDocument: {
-          uri: `file://${filePath}`,
-        },
-      });
-
-      await waitForNewContextDeleted(connection);
-    }
-
-    if (formatFixAll) {
-      files
-        .filter((f) => !diffApplied.has(f))
-        .forEach((f) => {
-          const diff = diffs.get(f);
-          if (diff) {
-            const result = applyPatch(fs.readFileSync(f, "utf8"), diff);
-            if (result) {
-              diffApplied.add(f);
-              fs.writeFileSync(f, result, "utf8");
-              formattingApplied.push({ file: f, context });
-            } else {
-              log("error", "Failed to apply changes to file", f);
-            }
-          }
-        });
-    }
-  }
+  await Promise.all(fileProcessingPromises);
 
   if (patchFile) {
     fs.writeFileSync(patchFile, Array.from(diffs.values()).join("\n\n"));
   }
 
-  connection.dispose();
-  lspProcess.kill();
+  await workerPool.dispose();
 
   if (outputFormat === "json") {
     console.log(JSON.stringify(jsonOut, undefined, 4));
