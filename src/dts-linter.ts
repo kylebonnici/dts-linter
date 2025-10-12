@@ -340,15 +340,16 @@ const gitAnnotation = (
     line: number;
   }
 ) => {
-  console.log(
-    `${levelToGitAnnotation(level)} ${fileName ? `file=${fileName},` : ""}${
-      start ? `line=${start.line},` : ""
-    }${start?.col ? `col=${start.col},` : ""}${end ? `line=${end.line},` : ""}${
-      end?.col ? `col=${end.col},` : ""
-    }${titleStr ? `title=${titleStr}` : ""}::${message}`
-  );
+  const items = [
+    fileName ? `file=${fileName}` : null,
+    start ? `line=${start.line}` : null,
+    start?.col ? `col=${start.col}` : null,
+    end ? `endLine=${end.line}` : null,
+    end?.col ? `endColumn=${end.col}` : null,
+    titleStr ? `title=${titleStr}` : null,
+  ].filter((i) => !!i);
+  console.log(`${levelToGitAnnotation(level)} ${items.join(",")}::${message}`);
 };
-
 const log = (
   level: "warn" | "error" | "info",
   message: string,
