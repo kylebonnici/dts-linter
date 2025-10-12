@@ -50,6 +50,7 @@ dts-linter --formatFixAll
 | `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                 |
 | `--patchFile`           | string          | -               | Write formatting diff output to file                                                               |
 | `--outputType`          | string          | `auto`          | Output format type: auto, pretty, annotations, or json                                             |
+| `--threads`             | number          | `1`             | Number of parallel LSP instances to use for processing files                                       |
 | `--help`                | boolean         | `false`         | Show help information                                                                              |
 
 ### Examples
@@ -78,9 +79,25 @@ dts-linter --diagnosticsFull --include ./include --binding ./zephyr/dts/bindings
 dts-linter --format --patchFile changes.patch
 ```
 
+#### Use multiple threads for faster processing
+
+```bash
+dts-linter --format --diagnostics --threads 4
+```
+
 ## File Discovery
 
 When no `--file` option is provided, the linter automatically searches for DeviceTree files using the pattern `**/*.{dts,dtsi,overlay}` or `**/*.{dts}` when using `--diagnosticsFull` in the current working directory.
+
+## Performance and Threading
+
+The linter supports parallel processing using multiple LSP instances to improve performance when processing many files:
+
+- Use `--threads N` to specify the number of parallel LSP instances
+- Each thread runs its own LSP server instance
+- Files are automatically distributed among available threads
+- Recommended to use 2-4 threads for optimal performance depending on your system
+- Threading is particularly beneficial when processing large numbers of files or when using `--diagnosticsFull`
 
 ## Output Formats
 
