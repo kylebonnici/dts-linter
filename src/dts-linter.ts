@@ -350,6 +350,27 @@ const gitAnnotation = (
   ].filter((i) => !!i);
   console.log(`${levelToGitAnnotation(level)} ${items.join(",")}::${message}`);
 };
+
+function logDiagnostic(issue: Diagnostic, fileName: string) {
+  log(
+    issue.severity === DiagnosticSeverity.Error
+      ? "error"
+      : issue.severity === DiagnosticSeverity.Warning
+      ? "warn"
+      : "warn",
+    issue.message,
+    fileName,
+    undefined,
+    {
+      line: issue.range.start.line + 1,
+      col: issue.range.start.character,
+    },
+    {
+      line: issue.range.end.line + 1,
+      col: issue.range.end.character,
+    }
+  );
+}
 const log = (
   level: "warn" | "error" | "info",
   message: string,
@@ -828,14 +849,15 @@ const formatFile = async (
     text: originalText,
   };
 
-  const newText = (await connection.sendRequest(
+  const result = (await connection.sendRequest(
     "devicetree/formattingText",
     params
-  )) as string | undefined;
+  )) as { text: string; diagnostics: Diagnostic[] } | undefined;
 
   const indent = mainFile ? "" : "\t";
 
-  if (newText && newText !== originalText) {
+  if (result && result.text !== originalText) {
+    const newText = result?.text;
     const relativePath = relative(cwd, absPath);
     const diff = createPatch(`a/${relativePath}`, originalText, newText);
     log(
@@ -848,6 +870,12 @@ const formatFile = async (
       indent,
       progressString
     );
+
+    if (outputFormat === "annotations") {
+      result.diagnostics.forEach((issue) => {
+        logDiagnostic(issue, absPath);
+      });
+    }
 
     if (diffs.has(absPath)) {
       if (diffs.get(absPath) !== diff && patchFile) {
