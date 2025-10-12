@@ -859,11 +859,11 @@ const formatFile = async (
           absPath,
           undefined,
           {
-            line: issue.range.start.line,
+            line: issue.range.start.line + 1,
             col: issue.range.start.character,
           },
           {
-            line: issue.range.end.line,
+            line: issue.range.end.line + 1,
             col: issue.range.end.character,
           }
         );
