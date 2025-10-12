@@ -351,26 +351,6 @@ const gitAnnotation = (
   console.log(`${levelToGitAnnotation(level)} ${items.join(",")}::${message}`);
 };
 
-function logDiagnostic(issue: Diagnostic, fileName: string) {
-  log(
-    issue.severity === DiagnosticSeverity.Error
-      ? "error"
-      : issue.severity === DiagnosticSeverity.Warning
-      ? "warn"
-      : "warn",
-    issue.message,
-    fileName,
-    undefined,
-    {
-      line: issue.range.start.line + 1,
-      col: issue.range.start.character,
-    },
-    {
-      line: issue.range.end.line + 1,
-      col: issue.range.end.character,
-    }
-  );
-}
 const log = (
   level: "warn" | "error" | "info",
   message: string,
@@ -871,9 +851,22 @@ const formatFile = async (
       progressString
     );
 
-    if (outputFormat === "annotations") {
+    if (outputFormat === "json" || outputFormat === "annotations") {
       result.diagnostics.forEach((issue) => {
-        logDiagnostic(issue, absPath);
+        log(
+          "error",
+          issue.message,
+          absPath,
+          undefined,
+          {
+            line: issue.range.start.line,
+            col: issue.range.start.character,
+          },
+          {
+            line: issue.range.end.line,
+            col: issue.range.end.character,
+          }
+        );
       });
     }
 
