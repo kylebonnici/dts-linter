@@ -22,8 +22,8 @@ jobs:
           node-version: "20.x"
           registry-url: "https://registry.npmjs.org"
           cache: "npm"
+      - name: Update npm
+        run: npm install -g npm@latest
       - run: npm ci
       - run: npm run compile:prod
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
