@@ -4,7 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.0] - Unreleased
+## [0.3.1] - 2025-09-24
+
+### Fixed
+
+- JSON output is now written directly to stdout and awaited before process exists
+  to prevent truncation caused by buffered output.
+
+## [0.3.0] - 2025-09-22
 
 ### Added
 

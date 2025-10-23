@@ -722,7 +722,11 @@ async function run() {
   await workerPool.dispose();
 
   if (outputFormat === "json") {
-    console.log(JSON.stringify(jsonOut, undefined, 4));
+    await new Promise<void>((resolve) => {
+      process.stdout.write(JSON.stringify(jsonOut, undefined, 4), () =>
+        resolve()
+      );
+    });
   } else {
     log("info", `Processed ${completedPaths.size} files`);
     if (format && !onGit) {
