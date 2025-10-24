@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -25,7 +25,7 @@
   "license": "Apache-2.0",
   "description": "",
   "dependencies": {
-    "devicetree-language-server": "^0.6.2"
+    "devicetree-language-server": "^0.6.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.3",

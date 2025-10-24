@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.2] - 2025-09-24
+
+### Fixed
+
+- Bump up `devicetree-language-server` to version 0.6.3 to address `undefined` in
+  annotation messages.
+
 ## [0.3.1] - 2025-09-24
 
 ### Fixed
