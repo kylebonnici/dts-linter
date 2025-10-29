@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.3] - 2025-09-29
+
+### Fixed
+
+- Bump up `devicetree-language-server` to version 0.6.4 to address:
+  - Formatting issue where arguments of a MACRO call are forced on one line.
+  - Formatter would not format first value after `(` properly when the value
+    is not on the same line as `(`
+  - Issue with parser when processing files that use macros to generate code.
+
 ## [0.3.2] - 2025-09-24
 
 ### Fixed
