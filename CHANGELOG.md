@@ -4,7 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.3] - 2025-09-29
+## [0.3.4] - 2025-11-02
+
+### Fixed
+
+- Bump up `devicetree-language-server` to version 0.6.6 to address:
+  - Fomatting of comments used in MACRO params.
+
+## [0.3.3] - 2025-10-29
 
 ### Fixed
 
@@ -14,21 +21,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     is not on the same line as `(`
   - Issue with parser when processing files that use macros to generate code.
 
-## [0.3.2] - 2025-09-24
+## [0.3.2] - 2025-10-24
 
 ### Fixed
 
 - Bump up `devicetree-language-server` to version 0.6.3 to address `undefined` in
   annotation messages.
 
-## [0.3.1] - 2025-09-24
+## [0.3.1] - 2025-10-24
 
 ### Fixed
 
 - JSON output is now written directly to stdout and awaited before process exists
   to prevent truncation caused by buffered output.
 
-## [0.3.0] - 2025-09-22
+## [0.3.0] - 2025-10-22
 
 ### Added
 
