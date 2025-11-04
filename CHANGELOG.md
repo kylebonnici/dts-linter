@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.6] - 2025-11-04
+
+### Change
+
+- Harden starting of dts-lsp server by using the absolute path of Node.js
+  that was used to start the dts-linter it self
+
 ## [0.3.5] - 2025-11-04
 
 ### Fixed
