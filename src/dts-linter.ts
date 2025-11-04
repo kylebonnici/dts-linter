@@ -49,7 +49,7 @@ class LSPWorkerPool {
   }
 
   private async createWorker(id: number): Promise<void> {
-    const lspProcess = cp.spawn("node", [serverPath, "--stdio"], {
+    const lspProcess = cp.spawn(process.execPath, [serverPath, "--stdio"], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
