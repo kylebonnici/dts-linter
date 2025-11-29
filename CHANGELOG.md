@@ -4,11 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.7] - Unreleased
+## [0.3.7] - 2025-11-29
 
-### Security
+### Fixed
 
-- Update `glob` to address CVE-2025-64756
+- Bump up `devicetree-language-server` to version 0.7.0 to address:
+  - Formatting of properties when under nodes
+  - Formatting of Node when defined inside a Macro block
+  - Formatting of property values when these exceed wordWrapColumn
 
 ## [0.3.6] - 2025-11-04
 
@@ -22,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Bump up `devicetree-language-server` to version 0.6.7 to address:
-  - Formatting issue with traling whitespace on windows.
+  - Formatting issue with trailing whitespace on windows.
 - Fixed issue with dts-linter not starting up at all on windows.
 
 ## [0.3.4] - 2025-11-02
