@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.9] - 2025-12-07
+
+### Added
+
+- Bump up `devicetree-language-server` to version 0.7.3 to address:
+  - Hanging when formatting certain cases of long line wrapping.
+  - Performance when formatting multiple disabled `#ifdef/#if` blocks.
+  - Formatting comments in `#ifdef/#if` blocks when these are the only content.
+  - Long line wrapping when value does not exceed the limit but the `>,` do.
+
 ## [0.3.8] - 2025-12-02
 
 ### Added
