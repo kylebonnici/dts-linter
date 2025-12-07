@@ -4,19 +4,11 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.8] - 2025-12-02
-
-### Added
-
-- Bump up `devicetree-language-server` to version 0.7.1 to address:
-  - Formatting node address to lowercase hex
-  - Formatting reg hex values to lowercase hex
-
-## [0.3.7] - 2025-11-29
+## [0.3.7-hotfix1] - 2025-12-07
 
 ### Fixed
 
-- Bump up `devicetree-language-server` to version 0.7.0 to address:
+- Bump up `devicetree-language-server` to version 0.7.2-hotfix1 to address:
   - Formatting of properties when under nodes
   - Formatting of Node when defined inside a Macro block
   - Formatting of property values when these exceed wordWrapColumn

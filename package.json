@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.3.8",
+  "version": "0.3.7-hotfix1",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -24,9 +24,6 @@
   "author": "Kyle Micallef Bonnici",
   "license": "Apache-2.0",
   "description": "",
-  "dependencies": {
-    "devicetree-language-server": "^0.7.1"
-  },
   "devDependencies": {
     "@types/node": "^24.0.3",
     "devicetree-language-server-types": "^0.0.2-alpha.8",
@@ -39,5 +36,8 @@
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-types": "^3.17.5",
     "zod": "^3.25.67"
+  },
+  "dependencies": {
+    "devicetree-language-server": "^0.7.2-hotfix1"
   }
 }
