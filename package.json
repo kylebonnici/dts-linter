@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.3.7-hotfix1",
+  "version": "0.3.7-hotfix2",
   "main": "index.js",
   "repository": {
     "type": "git",
@@ -38,6 +38,6 @@
     "zod": "^3.25.67"
   },
   "dependencies": {
-    "devicetree-language-server": "^0.7.2-hotfix1"
+    "devicetree-language-server": "0.7.2-hotfix1"
   }
 }
