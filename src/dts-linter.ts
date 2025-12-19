@@ -748,7 +748,7 @@ async function run() {
     }
 
     if (diagnosticIssues.size) {
-      if (outputFormat === "pretty" || (outputFormat === "auto" && !onGit)) {
+      if (outputFormat === "pretty" || outputFormat === "auto") {
         console.log("Diagnostic issues summary");
 
         console.log(
@@ -761,7 +761,10 @@ async function run() {
                       `Board File: ${relative(
                         cwd,
                         v.context.mainDtsPath.file
-                      )}\n\tIssues:\n\t\t${v.message}`
+                      )}\n\tIssues:\n\t\t${v.message.replaceAll(
+                        "[error]",
+                        "[err]"
+                      )}`
                   )
                   .join("\n\t")}\n${grpEnd()}`
             )
