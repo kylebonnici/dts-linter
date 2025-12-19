@@ -1,6 +1,6 @@
 {
   "name": "dts-linter",
-  "version": "0.3.10-beta1",
+  "version": "0.3.10-beta2",
   "main": "index.js",
   "repository": {
     "type": "git",
