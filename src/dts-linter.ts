@@ -552,7 +552,7 @@ async function processFileWithWorker(
                 "error",
                 issue.message,
                 f,
-                "Synatx error.",
+                "Syntax error.",
                 {
                   line: issue.range.start.line + 1,
                   col: issue.range.start.character,
@@ -579,7 +579,7 @@ async function processFileWithWorker(
               "error",
               `\n\t\t${message}`,
               f,
-              "Synatx error.",
+              "Syntax error.",
               undefined,
               undefined,
               indent
