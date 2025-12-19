@@ -352,7 +352,7 @@ const gitAnnotation = (
 };
 
 const log = (
-  level: "warn" | "error" | "info",
+  level: Level,
   message: string,
   fileName?: string,
   titleStr?: string,
