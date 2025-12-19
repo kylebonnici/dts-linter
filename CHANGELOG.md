@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.10] - Unreleased
+
+### Fixed
+
+- Corrected CLI help from  `--includes` and `--bindings` to `--include` and `--binding`
+
+
 ## [0.3.9] - 2025-12-07
 
 ### Added

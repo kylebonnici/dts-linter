@@ -211,8 +211,8 @@ const helpString = `Usage: dts-linter [options]
 Options:
   --file                                          List of input files (can be repeated).
   --cwd <path>                                    Set the current working directory.
-  --includes                                      Paths (absolute or relative to CWD) to resolve includes (default: []).
-  --bindings                                      Zephyr binding root directories (default: []).
+  --include                                       Paths (absolute or relative to CWD) to resolve includes (default: []).
+  --binding                                       Zephyr binding root directories (default: []).
   --logLevel <none|verbose>                       Set the logging verbosity (default: none).
   --format                                        Format the files specified in --file (default: false).
   --formatFixAll                                  Apply formatting changes directly to the files (default: false).
