@@ -4,11 +4,18 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.11] - Unreleased
+
+### Added
+
+- Bump up `devicetree-language-server` to version 0.8.0-beta2 to:
+  - `#includes` are not longer indented depending on the depth of the node they are in.
+
 ## [0.3.10] - Unreleased
 
 ### Added
 
-- Bump up `devicetree-language-server` to version 0.8.0 to:
+- Bump up `devicetree-language-server` to version 0.8.0-beta1 to:
   - Formatting `Remove trailing whitespace at the end of file.` diagnostic line number was always
     reported one line too forward.
 - Formatting of expressions will now indent to align with the group they are in example:
@@ -29,8 +36,7 @@ dmas = <&dma2 1 0 (STM32_DMA_MODE_NORMAL | STM32_DMA_PRIORITY_HIGH |
 
 ### Fixed
 
-- Corrected CLI help from  `--includes` and `--bindings` to `--include` and `--binding`
-
+- Corrected CLI help from `--includes` and `--bindings` to `--include` and `--binding`
 
 ## [0.3.9] - 2025-12-07
 

@@ -99,6 +99,7 @@ class LSPWorkerPool {
           autoChangeContext: true,
           allowAdhocContexts: true,
           defaultLockRenameEdits: [],
+          disableFileWatchers: true,
         },
       },
     });
