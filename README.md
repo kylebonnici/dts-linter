@@ -1,4 +1,4 @@
-![Build Status](https://github.com/kylebonnici/dts-linter/actions/workflows/node.js/badge.svg)
+![Build Status](https://github.com/kylebonnici/dts-linter/actions/workflows/node/badge.svg)
 
 # DTS Linter
 
