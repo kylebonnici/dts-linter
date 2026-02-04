@@ -37,8 +37,6 @@ dmas = <&dma2 1 0 (STM32_DMA_MODE_NORMAL | STM32_DMA_PRIORITY_HIGH |
 				   STM32_DMA_16BITS) 0>;
 ```
 
-> > > > > > > Stashed changes
-
 ### Added
 
 - Bump up `devicetree-language-server` to version 0.8.0 to:
