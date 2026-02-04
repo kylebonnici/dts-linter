@@ -11,13 +11,11 @@
       ],
       "args": [
         "${workspaceFolder}/src/dts-linter.ts",
-        "--format",
-        "--outputFormat",
-        "json",
+        "--diagnosticsFull",
         "--cwd",
-        "/Users/kylebonnici/workspace/personal/zephyr/",
-        "--file",
-        "/Users/kylebonnici/workspace/personal/zephyr/boards/nordic/nrf54l15dk/nrf54l15dk_nrf54l15_cpuapp.dts",
+        "/Users/kylebonnici/workspace/personal/test/upmerge_coremark_nrf7120/",
+        "--diagnosticsConfig",
+        "/Users/kylebonnici/workspace/personal/linter/run.json"
       ],
       "cwd": "${workspaceFolder}",
       "internalConsoleOptions": "neverOpen",

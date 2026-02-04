@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
 import cp from "child_process";
-import { ContextListItem, File } from "devicetree-language-server-types";
+import {
+  Context,
+  ContextListItem,
+  File,
+} from "devicetree-language-server-types";
 import fs, { existsSync } from "fs";
 import path from "path";
 import { createMessageConnection, MessageConnection } from "vscode-jsonrpc";
@@ -9,7 +13,7 @@ import { StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 
 import { z } from "zod";
 import { parseArgs } from "node:util";
-import { relative, resolve } from "node:path";
+import { basename, relative, resolve } from "node:path";
 import { applyPatch, createPatch } from "diff";
 import { globSync } from "glob";
 import pkg from "../package.json";
@@ -18,8 +22,16 @@ import {
   DiagnosticSeverity,
   TextDocumentItem,
 } from "vscode-languageserver-types";
+import { error } from "node:console";
 
 const serverPath = require.resolve("devicetree-language-server/dist/server.js");
+interface ContextConfig {
+  mainFile: string;
+  includePaths?: string[];
+  bindingPaths?: string[];
+  overlayRuns?: string[][];
+  onlyRunWithOverlays?: boolean;
+}
 
 interface LSPWorker {
   id: number;
@@ -37,7 +49,7 @@ class LSPWorkerPool {
     private cwd: string,
     private includesPaths: string[],
     private bindings: string[],
-    private logLevel: LogLevel
+    private logLevel: LogLevel,
   ) {}
 
   async initialize(): Promise<void> {
@@ -61,7 +73,7 @@ class LSPWorkerPool {
 
     const connection = createMessageConnection(
       new StreamMessageReader(lspProcess.stdout),
-      new StreamMessageWriter(lspProcess.stdin)
+      new StreamMessageWriter(lspProcess.stdin),
     );
 
     if (this.logLevel === "verbose") {
@@ -175,11 +187,11 @@ function isGitCI(): boolean {
 
   return Boolean(
     env.CI &&
-      (env.GITHUB_ACTIONS || // GitHub Actions
-        env.GITLAB_CI || // GitLab CI
-        env.BITBUCKET_BUILD_NUMBER || // Bitbucket Pipelines
-        env.CIRCLECI || // CircleCI
-        env.TRAVIS) // Travis CI
+    (env.GITHUB_ACTIONS || // GitHub Actions
+      env.GITLAB_CI || // GitLab CI
+      env.BITBUCKET_BUILD_NUMBER || // Bitbucket Pipelines
+      env.CIRCLECI || // CircleCI
+      env.TRAVIS), // Travis CI
   );
 }
 
@@ -194,6 +206,7 @@ const schema = z.object({
   processIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   diagnosticsFull: z.boolean().optional().default(false),
+  diagnosticsConfig: z.string().optional(),
   showInfoDiagnostics: z.boolean().optional().default(false),
   patchFile: z.string().optional(),
   outputFormat: z
@@ -216,9 +229,9 @@ Options:
   --logLevel <none|verbose>                       Set the logging verbosity (default: none).
   --format                                        Format the files specified in --file (default: false).
   --formatFixAll                                  Apply formatting changes directly to the files (default: false).
-  --processIncludes                               Process includes for formatting or diagnostics (default: false).
   --diagnostics                                   Show basic syntax diagnostics for files (default: false).
   --diagnosticsFull                               Show full diagnostics for files (default: false).
+  --diagnosticsConfig <path>                      Path to diagnostics configuration file.
   --showInfoDiagnostics                           Show information diagnostics
   --patchFile <path>                              Write formatting diff output to this file (optional).
   --outputFormat <auto|pretty|annotations|json>   stdout output type.
@@ -240,9 +253,9 @@ try {
       logLevel: { type: "string" },
       format: { type: "boolean" },
       formatFixAll: { type: "boolean" },
-      processIncludes: { type: "boolean" },
       diagnostics: { type: "boolean" },
       diagnosticsFull: { type: "boolean" },
+      diagnosticsConfig: { type: "string" },
       showInfoDiagnostics: { type: "boolean" },
       patchFile: { type: "string" },
       outputFormat: { type: "string" },
@@ -289,10 +302,15 @@ const format = argv.format || formatFixAll;
 const diagnosticsFull = argv.diagnosticsFull;
 const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
-const processIncludes = argv.processIncludes || diagnosticsFull;
 const outputFormat = argv.outputFormat;
 const patchFile = argv.patchFile;
 const threads = argv.threads;
+const diagnosticsConfigPath = argv.diagnosticsConfig;
+
+if (diagnosticsConfigPath && argv.file) {
+  console.log(`Cannot use --diagnosticsConfig with --file option.`);
+  process.exit(0);
+}
 
 const onGit =
   (isGitCI() && outputFormat === "auto") || outputFormat === "annotations";
@@ -338,7 +356,7 @@ const gitAnnotation = (
   end?: {
     col?: number;
     line: number;
-  }
+  },
 ) => {
   const items = [
     fileName ? `file=${fileName}` : null,
@@ -366,7 +384,7 @@ const log = (
     line: number;
   },
   indent?: string,
-  progressString?: string
+  progressString?: string,
 ) => {
   if (outputFormat === "json") {
     jsonOut.issues.push({
@@ -389,7 +407,7 @@ const log = (
       fileName ? relative(cwd, fileName) : undefined,
       titleStr,
       start,
-      end
+      end,
     );
     return;
   }
@@ -403,13 +421,13 @@ const log = (
     `${level === "error" ? "❌" : "⚠️"} ${indent ?? ""}${
       progressString ?? ""
     } ${[
-      fileName ? file(fileName) : undefined,
+      fileName?.trim() ? file(fileName) : fileName,
       start ? startMsg(start.line, start.col) : undefined,
       end ? endMsg(end.line, end.col) : undefined,
       message,
     ]
       .filter((v) => !!v)
-      .join(joinStr)}`
+      .join(joinStr)}`,
   );
 };
 
@@ -431,22 +449,46 @@ const jsonOut: { cwd: string; issues: Issue[] } = {
   issues: [],
 };
 
-if (!argv.file) {
-  log("info", `Searching for '**/*.{dts,dtsi,overlay}' in ${cwd}`);
-  argv.file = globSync(
-    diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}",
-    {
-      cwd: argv.cwd,
-      nodir: true,
-    }
+if (!argv.diagnosticsConfig && !argv.file) {
+  const globString = diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}";
+  log("info", `Searching for '${globString}' in ${cwd}`);
+  argv.file = globSync(globString, {
+    cwd: argv.cwd,
+    nodir: true,
+  });
+}
+
+const configs: ContextConfig[] = [];
+if (argv.diagnosticsConfig) {
+  const configContent = fs.readFileSync(
+    resolve(cwd, argv.diagnosticsConfig),
+    "utf8",
+  );
+  try {
+    const parsedConfig = JSON.parse(configContent) as ContextConfig[];
+    configs.push(
+      ...parsedConfig.map((c) => ({
+        ...c,
+        mainFile: resolve(cwd, c.mainFile),
+        includePaths: c.includePaths?.map((p) => resolve(cwd, p)),
+        bindingPaths: c.bindingPaths?.map((p) => resolve(cwd, p)),
+        overlayRuns: c.overlayRuns?.map((or) => or.map((p) => resolve(cwd, p))),
+      })),
+    );
+  } catch (e) {
+    console.log(`Failed to parse diagnostics config file: ${e}`);
+    process.exit(1);
+  }
+} else if (argv.file) {
+  configs.push(
+    ...argv.file
+      .filter((f) => !!f)
+      .map<ContextConfig>((f) => ({
+        mainFile: resolve(cwd, f!),
+      })),
   );
 }
-const filePaths = (argv.file.filter((v) => v) as string[]).map((f) =>
-  resolve(cwd, f)
-);
 
-let i = 0;
-let total = filePaths.length;
 const diffs = new Map<string, string>();
 let formattingErrors: { file: string; context?: ContextListItem }[] = [];
 let formattingApplied: { file: string; context?: ContextListItem }[] = [];
@@ -467,7 +509,7 @@ run().catch((err) => {
 });
 
 const diagnosticSeverityToString = (
-  severity: DiagnosticSeverity = DiagnosticSeverity.Hint
+  severity: DiagnosticSeverity = DiagnosticSeverity.Hint,
 ): string => {
   switch (severity) {
     case DiagnosticSeverity.Error:
@@ -481,48 +523,150 @@ const diagnosticSeverityToString = (
   }
 };
 
+async function contextDiagnostics(
+  worker: LSPWorker,
+  run: Context,
+  fileIndex: number,
+  context: ContextListItem,
+) {
+  await worker.connection.sendRequest("devicetree/setActive", {
+    id: context.id,
+  });
+
+  const isMainFile = (f: string) => f === run.dtsFile;
+  const progressString = (isMainFile: boolean, j: number) =>
+    isMainFile
+      ? `[${fileIndex}/${numberOfRuns}]`
+      : `[${j}/${files.length - 1}]`.padEnd(
+          (files.length - 1).toString().length * 2 + 3,
+          " ",
+        );
+
+  const files = [
+    ...flatFileTree(context.mainDtsPath),
+    ...context.overlays.flatMap(flatFileTree),
+  ].filter((f) => !f.endsWith(".h") && existsSync(f));
+
+  await Promise.all(
+    files.map(async (f, j) => {
+      const mainFile = isMainFile(f);
+      if (run.dtsFile.endsWith(".dts") || !diagnosticsFull) {
+        const issues = await fileDiagnosticIssues(
+          worker.connection,
+          f,
+          mainFile,
+          progressString(mainFile, j),
+          run,
+        );
+        if (issues?.length) {
+          if (!diagnosticIssues.has(f)) {
+            diagnosticIssues.set(f, []);
+          }
+          diagnosticIssues.get(f)?.push({
+            maxSeverity: issues.reduce(
+              (p, c) =>
+                (c.severity ?? DiagnosticSeverity.Hint) < p
+                  ? (c.severity ?? DiagnosticSeverity.Hint)
+                  : p,
+              DiagnosticSeverity.Hint as DiagnosticSeverity,
+            ),
+            context,
+            message: issues
+              .map(
+                (issue) =>
+                  `[${diagnosticSeverityToString(issue.severity)}] ${
+                    issue.message
+                  }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
+                    issue.range.end,
+                  )}`,
+              )
+              .join("\n\t\t"),
+          });
+        }
+      } else {
+        skippedDiagnosticChecks.add(f);
+        log(
+          "warn",
+          "Check can only be done on full context!",
+          f,
+          undefined,
+          undefined,
+          undefined,
+          `${mainFile ? "" : "\t"}`,
+          progressString(mainFile, j),
+        );
+      }
+
+      completedPaths.add(f);
+    }),
+  );
+  worker.connection.sendRequest("devicetree/removeContext", {
+    id: context.id,
+    name: run.ctxName,
+  });
+
+  await waitForNewContextDeleted(worker.connection, context.id);
+}
+
 async function processFileWithWorker(
   worker: LSPWorker,
-  filePath: string,
-  fileIndex: number,
-  totalFiles: number
+  config: ContextConfig,
+  configIndex: number,
 ): Promise<void> {
-  const text = fs.readFileSync(filePath, "utf8");
+  const text = fs.readFileSync(config.mainFile, "utf8");
 
-  const textDocument: TextDocumentItem = {
-    uri: toFileUri(filePath),
-    languageId: "devicetree",
-    version: 0,
-    text,
-  };
-
-  let files = [filePath];
+  let files = [config.mainFile];
   let context: ContextListItem | undefined;
 
-  if (diagnostics || processIncludes) {
-    worker.connection.sendNotification("textDocument/didOpen", {
-      textDocument,
+  if (diagnostics) {
+    const runs: Context[] = [];
+    if (!config.onlyRunWithOverlays) {
+      runs.push({
+        ctxName: `dts-linter:${config.mainFile}-no-overlays`,
+        dtsFile: config.mainFile,
+        includePaths: config.includePaths,
+        zephyrBindings: config.bindingPaths,
+        cwd,
+      } satisfies Context);
+    }
+    (config.overlayRuns ?? []).forEach((overlaySet, i) => {
+      runs.push({
+        ctxName: `dts-linter:${config.mainFile}-overlay-run-${i}`,
+        dtsFile: config.mainFile,
+        overlays: overlaySet,
+        includePaths: config.includePaths,
+        zephyrBindings: config.bindingPaths,
+        cwd,
+      } satisfies Context);
     });
 
-    context = await waitForNewActiveContext(worker.connection);
-    files = [
-      ...flatFileTree(context.mainDtsPath),
-      ...context.overlays.flatMap(flatFileTree),
-    ].filter(
-      (f) =>
-        !f.endsWith(".h") &&
-        existsSync(f) &&
-        (processIncludes || filePaths.includes(f))
+    const ctx = await Promise.all(
+      runs.map((run) =>
+        worker.connection.sendRequest("devicetree/requestContext", run),
+      ) as Promise<ContextListItem>[],
+    );
+
+    await runs.reduce(
+      (prev, cur, index) =>
+        prev.finally(() =>
+          contextDiagnostics(
+            worker,
+            cur,
+            calcNumberOfRuns(configs.slice(0, configIndex)) + index + 1,
+            ctx[index],
+          ),
+        ),
+      Promise.resolve(),
     );
   }
 
-  const isMainFile = (f: string) => f === filePath;
+  const isMainFile = (f: string) => f === config.mainFile;
   const progressString = (isMainFile: boolean, j: number) =>
     isMainFile
-      ? `[${fileIndex}/${totalFiles}]`
+      ? `[${configIndex}/${numberOfRuns}]`
       : `[${j}/${files.length - 1}]`.padEnd(
           (files.length - 1).toString().length * 2 + 3,
-          " "
+          " ",
         );
 
   if (format) {
@@ -538,7 +682,7 @@ async function processFileWithWorker(
             mainFile,
             indent,
             mainFile ? text : fs.readFileSync(f, "utf8"),
-            context
+            context,
           );
         } catch (e: any) {
           formattingErrors.push({
@@ -560,7 +704,7 @@ async function processFileWithWorker(
                 {
                   line: issue.range.end.line + 1,
                   col: issue.range.end.character,
-                }
+                },
               );
             });
           } else {
@@ -571,8 +715,8 @@ async function processFileWithWorker(
                     `[${diagnosticSeverityToString(issue.severity)}] ${
                       issue.message
                     }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
-                      issue.range.end
-                    )}`
+                      issue.range.end,
+                    )}`,
                 )
                 .join("\n\t\t") ?? "";
             log(
@@ -582,80 +726,14 @@ async function processFileWithWorker(
               "Syntax error.",
               undefined,
               undefined,
-              indent
+              indent,
             );
           }
         }
 
         completedPaths.add(f);
-      })
+      }),
     );
-  }
-
-  if (diagnostics && context) {
-    await Promise.all(
-      files.map(async (f, j) => {
-        const mainFile = isMainFile(f);
-        if (filePath.endsWith(".dts") || !diagnosticsFull) {
-          const issues = await fileDiagnosticIssues(
-            worker.connection,
-            f,
-            mainFile,
-            progressString(mainFile, j),
-            relative(cwd, filePath)
-          );
-          if (issues?.length) {
-            if (!diagnosticIssues.has(f)) {
-              diagnosticIssues.set(f, []);
-            }
-            diagnosticIssues.get(f)?.push({
-              maxSeverity: issues.reduce(
-                (p, c) =>
-                  (c.severity ?? DiagnosticSeverity.Hint) < p
-                    ? c.severity ?? DiagnosticSeverity.Hint
-                    : p,
-                DiagnosticSeverity.Hint as DiagnosticSeverity
-              ),
-              context,
-              message: issues
-                .map(
-                  (issue) =>
-                    `[${diagnosticSeverityToString(issue.severity)}] ${
-                      issue.message
-                    }: ${JSON.stringify(issue.range.start)}-${JSON.stringify(
-                      issue.range.end
-                    )}`
-                )
-                .join("\n\t\t"),
-            });
-          }
-        } else {
-          skippedDiagnosticChecks.add(f);
-          log(
-            "warn",
-            "Check can only be done on full context!",
-            f,
-            undefined,
-            undefined,
-            undefined,
-            `${mainFile ? "" : "\t"}`,
-            progressString(mainFile, j)
-          );
-        }
-
-        completedPaths.add(f);
-      })
-    );
-  }
-
-  if (diagnostics || processIncludes) {
-    worker.connection.sendNotification("textDocument/didClose", {
-      textDocument: {
-        uri: `file://${filePath}`,
-      },
-    });
-
-    await waitForNewContextDeleted(worker.connection);
   }
 
   if (formatFixAll) {
@@ -677,38 +755,31 @@ async function processFileWithWorker(
   }
 }
 
+const calcNumberOfRuns = (configs: ContextConfig[]) =>
+  configs.reduce((acc, curr) => {
+    return (
+      acc + (curr.overlayRuns?.length ?? 0) + (curr.onlyRunWithOverlays ? 0 : 1)
+    );
+  }, 0);
+
+const numberOfRuns = calcNumberOfRuns(configs);
+
 async function run() {
   const workerPool = new LSPWorkerPool(
     threads,
     cwd,
     includesPaths,
     bindings,
-    logLevel
+    logLevel,
   );
 
   await workerPool.initialize();
 
-  const paths = Array.from(new Set(filePaths)).sort((a, b) => {
-    const getPriority = (file: string): number => {
-      if (file.endsWith(".dts")) return 0;
-      if (file.endsWith(".dtsi")) return 1;
-
-      return 2;
-    };
-
-    return getPriority(a) - getPriority(b);
-  });
-
   // Process files in parallel using the worker pool
-  const fileProcessingPromises = paths.map(async (filePath, index) => {
+  const fileProcessingPromises = configs.map(async (config, index) => {
     const worker = await workerPool.getAvailableWorker();
 
-    await processFileWithWorker(
-      worker,
-      filePath,
-      index + 1,
-      paths.length
-    ).finally(() => {
+    await processFileWithWorker(worker, config, index).finally(() => {
       workerPool.releaseWorker(worker);
     });
   });
@@ -724,7 +795,7 @@ async function run() {
   if (outputFormat === "json") {
     await new Promise<void>((resolve) => {
       process.stdout.write(JSON.stringify(jsonOut, undefined, 4), () =>
-        resolve()
+        resolve(),
       );
     });
   } else {
@@ -735,13 +806,13 @@ async function run() {
           "error",
           `${formattingErrors.length - formattingApplied.length} of ${
             completedPaths.size
-          } Failed formatting checks`
+          } Failed formatting checks`,
         );
 
       if (formattingApplied.length)
         log(
           "info",
-          `${formattingApplied.length} of ${formattingErrors.length} formatted in place.`
+          `${formattingApplied.length} of ${formattingErrors.length} formatted in place.`,
         );
 
       if (!formattingErrors.length) log("info", `All files passed formatting`);
@@ -760,32 +831,32 @@ async function run() {
                     (v) =>
                       `Board File: ${relative(
                         cwd,
-                        v.context.mainDtsPath.file
-                      )}\n\tIssues:\n\t\t${v.message.replaceAll(
+                        v.context.mainDtsPath.file,
+                      )}${v.context.overlays.length ? `, Overlays: ${v.context.overlays.map((p) => basename(p.file)).join(" ")}` : ""}\n\tIssues:\n\t\t${v.message.replaceAll(
                         "[error]",
-                        "[err]"
-                      )}`
+                        "[err]",
+                      )}`,
                   )
-                  .join("\n\t")}\n${grpEnd()}`
+                  .join("\n\t")}\n${grpEnd()}`,
             )
-            .join("\n")
+            .join("\n"),
         );
 
         log(
           "error",
-          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`
+          `${diagnosticIssues.size} of ${completedPaths.size} file failed diagnostic checks`,
         );
 
         if (skippedDiagnosticChecks.size) {
           log(
             "warn",
-            `${skippedDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`
+            `${skippedDiagnosticChecks.size} of ${completedPaths.size} Skipped diagnostic checks`,
           );
         }
       }
 
       const errOrWarn = Array.from(diagnosticIssues).filter((i) =>
-        i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning)
+        i[1].some((ii) => ii.maxSeverity <= DiagnosticSeverity.Warning),
       );
       const hasWarnOrError = !!errOrWarn.length;
 
@@ -797,7 +868,7 @@ async function run() {
       } else {
         log(
           "error",
-          `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`
+          `${errOrWarn.length} of ${completedPaths.size} Failed diagnostic checks`,
         );
       }
     }
@@ -806,7 +877,7 @@ async function run() {
   process.exit(
     formattingErrors.length - formattingApplied.length || diagnosticIssues.size
       ? 1
-      : 0
+      : 0,
   );
 }
 
@@ -820,7 +891,7 @@ const formatFile = async (
   mainFile: boolean,
   progressString: string,
   originalText: string,
-  context?: ContextListItem
+  context?: ContextListItem,
 ) => {
   const params = {
     textDocument: {
@@ -838,7 +909,7 @@ const formatFile = async (
 
   const result = (await connection.sendRequest(
     "devicetree/formattingText",
-    params
+    params,
   )) as { text: string; diagnostics: Diagnostic[] } | undefined;
 
   const indent = mainFile ? "" : "\t";
@@ -855,7 +926,7 @@ const formatFile = async (
       undefined,
       undefined,
       indent,
-      progressString
+      progressString,
     );
 
     if (outputFormat === "json" || outputFormat === "annotations") {
@@ -872,7 +943,7 @@ const formatFile = async (
           {
             line: issue.range.end.line + 1,
             col: issue.range.end.character,
-          }
+          },
         );
       });
     }
@@ -887,7 +958,7 @@ const formatFile = async (
           undefined,
           undefined,
           indent,
-          progressString
+          progressString,
         );
       }
     } else {
@@ -908,7 +979,7 @@ const formatFile = async (
       undefined,
       undefined,
       indent,
-      progressString
+      progressString,
     );
   }
 };
@@ -920,7 +991,7 @@ const fileDiagnosticIssues = async (
   absPath: string,
   isMainFile: boolean,
   progressString: string,
-  mainFile: string
+  run: Context,
 ) => {
   processedDiagnosticChecks.add(absPath);
   const issues = (
@@ -932,27 +1003,37 @@ const fileDiagnosticIssues = async (
     (issue) =>
       issue.severity === DiagnosticSeverity.Error ||
       issue.severity === DiagnosticSeverity.Warning ||
-      (issue.severity === DiagnosticSeverity.Information && showInfoDiagnostics)
+      (issue.severity === DiagnosticSeverity.Information &&
+        showInfoDiagnostics),
   );
 
   const indent = isMainFile ? "" : "\t";
 
   if (issues.length) {
-    issues.forEach((issue, i) =>
-      log(
+    issues.forEach((issue, i) => {
+      const errorLevel =
         issue.severity === DiagnosticSeverity.Error
           ? "error"
           : issue.severity === DiagnosticSeverity.Warning
-          ? "warn"
-          : "warn",
+            ? "warn"
+            : "warn";
+      const message =
         outputFormat === "json"
-          ? `Board File: ${mainFile}: ${issue.message}`
-          : issue.message,
+          ? `Board File: ${run.dtsFile}${run.overlays?.length ? `, Overlays: ${run.overlays.map((f) => relative(cwd, f)).join(" ")}` : ""}, Message: ${issue.message}`
+          : issue.message;
+      const file =
         onGit || outputFormat === "json"
           ? absPath
           : i
-          ? "\t"
-          : `${absPath}\n${indent}\t`,
+            ? "\t"
+            : isMainFile
+              ? `${absPath}${run.overlays?.length ? ` (Overlays: ${run.overlays.map((f) => relative(cwd, f)).join(" ")})` : ""}\n${indent}\t`
+              : `${absPath}\n${indent}\t`;
+      const progressStr = i ? "" : progressString;
+      log(
+        errorLevel,
+        message,
+        file,
         undefined,
         {
           line: issue.range.start.line + 1,
@@ -963,49 +1044,29 @@ const fileDiagnosticIssues = async (
           col: issue.range.end.character,
         },
         indent,
-        i ? "" : progressString
-      )
-    );
+        progressStr,
+      );
+    });
 
     return issues;
   } else {
     log(
       "info",
-      `No diagnostic errors in ${relative(cwd, absPath)}`,
+      `No diagnostic errors in ${relative(cwd, absPath)}${run.overlays?.length ? ` (Overlays: ${run.overlays.map((f) => relative(cwd, f)).join(" ")})` : ""}`,
       undefined,
       undefined,
       undefined,
       undefined,
       indent,
-      progressString
+      progressString,
     );
   }
 };
 
-function waitForNewActiveContext(
-  connection: MessageConnection,
-  timeoutMs = 60000
-): Promise<ContextListItem> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error("Timed out waiting for devicetree/newActiveContext"));
-      d.dispose();
-    }, timeoutMs);
-
-    const d = connection.onNotification(
-      "devicetree/newActiveContext",
-      (param: ContextListItem) => {
-        clearTimeout(timeout);
-        resolve(param);
-        d.dispose();
-      }
-    );
-  });
-}
-
 function waitForNewContextDeleted(
   connection: MessageConnection,
-  timeoutMs = 5000
+  id: string,
+  timeoutMs = 6000,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -1013,10 +1074,14 @@ function waitForNewContextDeleted(
       d.dispose();
     }, timeoutMs);
 
-    const d = connection.onNotification("devicetree/contextDeleted", () => {
-      clearTimeout(timeout);
-      resolve();
-      d.dispose();
-    });
+    const d = connection.onNotification(
+      "devicetree/contextDeleted",
+      (ctx: ContextListItem) => {
+        if (ctx.id !== id) return;
+        clearTimeout(timeout);
+        resolve();
+        d.dispose();
+      },
+    );
   });
 }

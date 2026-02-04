@@ -4,12 +4,44 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.3.10] - Unreleased
+## [0.4.0] - 2026-02-04
+
+### Security
+
+- Update dependency to address CWE-1333, CWE-400 and CWE-1333
+
+### Removed
+
+- Remove cli argument `--processIncludes`
+
+### Added
+
+- Bump up `devicetree-language-server` to version 0.8.0 to:
+  - Formatting `Remove trailing whitespace at the end of file.` diagnostic line number was always
+    reported one line too forward.
+- Added experiments cli argument `--diagnosticsConfig` to allow `--diagnosticsFull` to have more
+  complex text cases
+- Formatting of expressions will now indent to align with the group they are in example:
+
+Was
+
+```devicetree
+dmas = <&dma2 1 0 (STM32_DMA_MODE_NORMAL | STM32_DMA_PRIORITY_HIGH |
+ 		STM32_DMA_16BITS) 0>;
+```
+
+Now
+
+```devicetree
+dmas = <&dma2 1 0 (STM32_DMA_MODE_NORMAL | STM32_DMA_PRIORITY_HIGH |
+				   STM32_DMA_16BITS) 0>;
+```
+
+> > > > > > > Stashed changes
 
 ### Fixed
 
-- Corrected CLI help from  `--includes` and `--bindings` to `--include` and `--binding`
-
+- Corrected CLI help from `--includes` and `--bindings` to `--include` and `--binding`
 
 ## [0.3.9] - 2025-12-07
 
