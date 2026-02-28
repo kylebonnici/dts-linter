@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.1] - 2026-02-28
+
+### Security
+
+- Update dependency to address CWE-1333, CWE-407
+
+### Changed
+
+- `#includes` are no longer indented to match the depth of the node they are in.
+
+### Added
+
+- Formatting: removes lines ending with `\` when this is not required.
+- Formatting: node names are formatted to not have `0x` and `ULL`
+- Diagnostic error when using `ranges;` and `#address-cells` or `#size-cells` of the node
+  declaring ranges does not match the `#address-cells` or `#size-cells` of the parent node.
+
+### Fixed
+
+- Formatting: Remove extra space between `>` or `]` when token before is from some comment
+- Default value for properties is now considered when using zephyr bindings and property
+  does not exists in context.
+
 ## [0.4.0] - 2026-02-04
 
 ### Security
