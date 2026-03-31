@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0] - 2026-04-01
+
+### Added
+
+- Add CLI arguments:
+  `--disableBaseFormattingRules` Disable base formatting rules (default: false).
+  `--disableIndentExpressions` Disable indentation for expressions when formatting (default: false).
+  `--disableRemoveDuplicateProperties` Disable removal of duplicate properties in the same scope when formatting (default: false).
+  `--disableRemoveEmptyReferences` Disable removal of empty references when formatting (default: false).
+  `--enableRemoveEmptyNodes` Enable removal of empty nodes when formatting (default: false).
+  `--enableRemoveEmptyRoots` Enable removal of empty root nodes when formatting (default: false).
+  `--enableSortNodesAndProperties` Enable sorting of nodes and properties when formatting (default: false).
+  `--sortNodesNodesBy <none|name|type>` When sorting nodes, sort by name or type (default: none).
+  `--enableSortPropertiesAlphabetically` Enable sorting of properties alphabetically when formatting (default: false).
+
 ## [0.4.1] - 2026-02-28
 
 ### Security

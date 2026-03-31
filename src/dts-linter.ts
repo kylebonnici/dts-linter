@@ -5,6 +5,7 @@ import {
   Context,
   ContextListItem,
   File,
+  FormattingFlags,
 } from "devicetree-language-server-types";
 import fs, { existsSync } from "fs";
 import path from "path";
@@ -20,9 +21,8 @@ import pkg from "../package.json";
 import {
   Diagnostic,
   DiagnosticSeverity,
-  TextDocumentItem,
+  FormattingOptions,
 } from "vscode-languageserver-types";
-import { error } from "node:console";
 
 const serverPath = require.resolve("devicetree-language-server/dist/server.js");
 interface ContextConfig {
@@ -203,6 +203,18 @@ const schema = z.object({
   logLevel: z.enum(["none", "verbose"]).optional().default("none"),
   format: z.boolean().optional().default(false),
   formatFixAll: z.boolean().optional().default(false),
+  disableBaseFormattingRules: z.boolean().optional().default(false),
+  disableIndentExpressions: z.boolean().optional().default(false),
+  disableRemoveDuplicateProperties: z.boolean().optional().default(false),
+  disableRemoveEmptyReferences: z.boolean().optional().default(false),
+  enableRemoveEmptyNodes: z.boolean().optional().default(false),
+  enableRemoveEmptyRoots: z.boolean().optional().default(false),
+  enableSortNodesAndProperties: z.boolean().optional().default(false),
+  sortNodesNodesBy: z
+    .enum(["none", "name", "address"])
+    .optional()
+    .default("none"),
+  enableSortPropertiesAlphabetically: z.boolean().optional().default(false),
   processIncludes: z.boolean().optional().default(false),
   diagnostics: z.boolean().optional().default(false),
   diagnosticsFull: z.boolean().optional().default(false),
@@ -229,6 +241,15 @@ Options:
   --logLevel <none|verbose>                       Set the logging verbosity (default: none).
   --format                                        Format the files specified in --file (default: false).
   --formatFixAll                                  Apply formatting changes directly to the files (default: false).
+  --disableBaseFormattingRules                    Disable base formatting rules (default: false).
+  --disableIndentExpressions                      Disable indentation for expressions when formatting (default: false).
+  --disableRemoveDuplicateProperties              Disable removal of duplicate properties in the same scope when formatting (default: false).
+  --disableRemoveEmptyReferences                  Disable removal of empty references when formatting (default: false).
+  --enableRemoveEmptyNodes                        Enable removal of empty nodes when formatting (default: false).
+  --enableRemoveEmptyRoots                        Enable removal of empty root nodes when formatting (default: false).
+  --enableSortNodesAndProperties                  Enable sorting of nodes and properties when formatting (default: false).
+  --sortNodesNodesBy <none|name|type>             When sorting nodes, sort by name or type (default: none).
+  --enableSortPropertiesAlphabetically            Enable sorting of properties alphabetically when formatting (default: false).
   --diagnostics                                   Show basic syntax diagnostics for files (default: false).
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --diagnosticsConfig <path>                      Path to diagnostics configuration file.
@@ -253,6 +274,15 @@ try {
       logLevel: { type: "string" },
       format: { type: "boolean" },
       formatFixAll: { type: "boolean" },
+      disableBaseFormattingRules: { type: "boolean" },
+      disableIndentExpressions: { type: "boolean" },
+      disableRemoveDuplicateProperties: { type: "boolean" },
+      disableRemoveEmptyReferences: { type: "boolean" },
+      enableRemoveEmptyNodes: { type: "boolean" },
+      enableRemoveEmptyRoots: { type: "boolean" },
+      enableSortNodesAndProperties: { type: "boolean" },
+      sortNodesNodesBy: { type: "string" },
+      enableSortPropertiesAlphabetically: { type: "boolean" },
       diagnostics: { type: "boolean" },
       diagnosticsFull: { type: "boolean" },
       diagnosticsConfig: { type: "string" },
@@ -299,6 +329,16 @@ const bindings = argv.binding;
 const logLevel = argv.logLevel as LogLevel;
 const formatFixAll = argv.formatFixAll;
 const format = argv.format || formatFixAll;
+const disableBaseFormattingRules = argv.disableBaseFormattingRules;
+const disableIndentExpressions = argv.disableIndentExpressions;
+const disableRemoveDuplicateProperties = argv.disableRemoveDuplicateProperties;
+const disableRemoveEmptyReferences = argv.disableRemoveEmptyReferences;
+const enableRemoveEmptyNodes = argv.enableRemoveEmptyNodes;
+const enableRemoveEmptyRoots = argv.enableRemoveEmptyRoots;
+const enableSortNodesAndProperties = argv.enableSortNodesAndProperties;
+const sortNodesNodesBy = argv.sortNodesNodesBy;
+const enableSortPropertiesAlphabetically =
+  argv.enableSortPropertiesAlphabetically;
 const diagnosticsFull = argv.diagnosticsFull;
 const diagnostics = argv.diagnostics || diagnosticsFull;
 const showInfoDiagnostics = argv.showInfoDiagnostics;
@@ -550,7 +590,7 @@ async function contextDiagnostics(
   await Promise.all(
     files.map(async (f, j) => {
       const mainFile = isMainFile(f);
-      if (run.dtsFile.endsWith(".dts") || !diagnosticsFull) {
+      if (run.dtsFile?.endsWith(".dts") || !diagnosticsFull) {
         const issues = await fileDiagnosticIssues(
           worker.connection,
           f,
@@ -831,8 +871,8 @@ async function run() {
                     (v) =>
                       `Board File: ${relative(
                         cwd,
-                        v.context.mainDtsPath.file,
-                      )}${v.context.overlays.length ? `, Overlays: ${v.context.overlays.map((p) => basename(p.file)).join(" ")}` : ""}\n\tIssues:\n\t\t${v.message.replaceAll(
+                        v.context.mainDtsPath.fsPath,
+                      )}${v.context.overlays.length ? `, Overlays: ${v.context.overlays.map((p) => basename(p.fsPath)).join(" ")}` : ""}\n\tIssues:\n\t\t${v.message.replaceAll(
                         "[error]",
                         "[err]",
                       )}`,
@@ -882,7 +922,7 @@ async function run() {
 }
 
 const flatFileTree = (file: File): string[] => {
-  return [file.file, ...file.includes.flatMap((f) => flatFileTree(f))];
+  return [file.fsPath, ...file.includes.flatMap((f) => flatFileTree(f))];
 };
 
 const formatFile = async (
@@ -903,7 +943,21 @@ const formatFile = async (
       trimTrailingWhitespace: true,
       insertFinalNewline: true,
       trimFinalNewlines: true,
-    },
+      removeMacroMultiline: true,
+      wrapLongLines: true,
+      baseFormattingRules: !disableBaseFormattingRules,
+      indentExpressions: !disableIndentExpressions,
+      removeDuplicateProperties: !disableRemoveDuplicateProperties,
+      removeEmptyReferences: !disableRemoveEmptyReferences,
+      removeEmptyNodes: enableRemoveEmptyNodes,
+      removeEmptyRoots: enableRemoveEmptyRoots,
+      sortNodesAndProperties:
+        enableSortNodesAndProperties ||
+        sortNodesNodesBy !== "none" ||
+        enableSortPropertiesAlphabetically,
+      sortNodesNodesBy: sortNodesNodesBy,
+      sortPropertiesAlphabetically: enableSortPropertiesAlphabetically,
+    } satisfies FormattingOptions & FormattingFlags,
     text: originalText,
   };
 
@@ -914,20 +968,24 @@ const formatFile = async (
 
   const indent = mainFile ? "" : "\t";
 
-  if (result && result.text !== originalText) {
+  const textIdentical = result && result.text === originalText;
+  if (result && (!textIdentical || result.diagnostics.length)) {
     const newText = result?.text;
     const relativePath = relative(cwd, absPath);
-    const diff = createPatch(`a/${relativePath}`, originalText, newText);
-    log(
-      "error",
-      diff,
-      absPath,
-      "Not correctly formatted.",
-      undefined,
-      undefined,
-      indent,
-      progressString,
-    );
+    let diff: string | null = null;
+    if (!textIdentical) {
+      diff = createPatch(`a/${relativePath}`, originalText, newText);
+      log(
+        "error",
+        diff,
+        absPath,
+        "Not correctly formatted.",
+        undefined,
+        undefined,
+        indent,
+        progressString,
+      );
+    }
 
     if (outputFormat === "json" || outputFormat === "annotations") {
       result.diagnostics.forEach((issue) => {
@@ -966,10 +1024,23 @@ const formatFile = async (
         file: absPath,
         context,
       });
-      diffs.set(absPath, diff);
+      if (diff) {
+        diffs.set(absPath, diff);
+      }
     }
 
-    return diff;
+    if (!diff) {
+      log(
+        "error",
+        `${relative(cwd, absPath)} unable to generate diff due to /* dts-format off */`,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        indent,
+        progressString,
+      );
+    }
   } else {
     log(
       "info",
