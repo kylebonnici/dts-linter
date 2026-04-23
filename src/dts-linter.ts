@@ -227,6 +227,7 @@ const schema = z.object({
     .default("auto"),
   tabSize: z.number().int().min(1).optional().default(8),
   insertSpaces: z.boolean().optional().default(false),
+  filetypes: z.array(z.string()).optional(),
   threads: z.number().int().min(1).optional().default(1),
   version: z.boolean().optional().default(false),
   help: z.boolean().optional().default(false),
@@ -237,6 +238,7 @@ const helpString = `Usage: dts-linter [options]
 
 Options:
   --file                                          List of input files (can be repeated).
+  --filetypes <ext,...>                           Comma-separated list of file extensions to select when --file is not set (default: dts,dtsi,overlay).
   --cwd <path>                                    Set the current working directory.
   --include                                       Paths (absolute or relative to CWD) to resolve includes (default: []).
   --binding                                       Zephyr binding root directories (default: []).
@@ -295,6 +297,7 @@ try {
       insertSpaces: { type: "boolean" },
       patchFile: { type: "string" },
       outputFormat: { type: "string" },
+      filetypes: { type: "string" },
       threads: { type: "string" },
       version: { type: "boolean" },
       help: { type: "boolean" },
@@ -302,11 +305,14 @@ try {
     strict: true,
   });
 
-  // Convert string-typed numeric options to numbers
+  // Convert string-typed numeric options to numbers; split comma-separated filetypes
   const processedValues = {
     ...values,
     tabSize: values.tabSize ? parseInt(values.tabSize, 10) : undefined,
     threads: values.threads ? parseInt(values.threads, 10) : undefined,
+    filetypes: values.filetypes
+      ? values.filetypes.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined,
   };
 
   const safeParseData = schema.safeParse(processedValues);
@@ -355,6 +361,11 @@ const threads = argv.threads;
 const tabSize = argv.tabSize;
 const insertSpaces = argv.insertSpaces;
 const diagnosticsConfigPath = argv.diagnosticsConfig;
+
+if (argv.filetypes && argv.file) {
+  console.log(`Cannot use --filetypes with --file option.`);
+  process.exit(1);
+}
 
 if (diagnosticsConfigPath && argv.file) {
   console.log(`Cannot use --diagnosticsConfig with --file option.`);
@@ -499,7 +510,12 @@ const jsonOut: { cwd: string; issues: Issue[] } = {
 };
 
 if (!argv.diagnosticsConfig && !argv.file) {
-  const globString = diagnosticsFull ? "**/*.{dts}" : "**/*.{dts,dtsi,overlay}";
+  const defaultTypes = diagnosticsFull ? ["dts"] : ["dts", "dtsi", "overlay"];
+  const activeTypes = argv.filetypes ?? defaultTypes;
+  const globString =
+    activeTypes.length === 1
+      ? `**/*.${activeTypes[0]}`
+      : `**/*.{${activeTypes.join(",")}}`;
   log("info", `Searching for '${globString}' in ${cwd}`);
   argv.file = globSync(globString, {
     cwd: argv.cwd,
