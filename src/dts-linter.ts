@@ -225,6 +225,8 @@ const schema = z.object({
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
     .default("auto"),
+  tabSize: z.number().int().min(1).optional().default(8),
+  insertSpaces: z.boolean().optional().default(false),
   threads: z.number().int().min(1).optional().default(1),
   version: z.boolean().optional().default(false),
   help: z.boolean().optional().default(false),
@@ -254,6 +256,8 @@ Options:
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --diagnosticsConfig <path>                      Path to diagnostics configuration file.
   --showInfoDiagnostics                           Show information diagnostics
+  --tabSize <number>                              Number of spaces per indentation level (default: 8).
+  --insertSpaces                                  Use spaces instead of tabs for indentation (default: false).
   --patchFile <path>                              Write formatting diff output to this file (optional).
   --outputFormat <auto|pretty|annotations|json>   stdout output type.
   --threads <number>                              Number of parallel LSP instances to use (default: 1).
@@ -287,6 +291,8 @@ try {
       diagnosticsFull: { type: "boolean" },
       diagnosticsConfig: { type: "string" },
       showInfoDiagnostics: { type: "boolean" },
+      tabSize: { type: "string" },
+      insertSpaces: { type: "boolean" },
       patchFile: { type: "string" },
       outputFormat: { type: "string" },
       threads: { type: "string" },
@@ -296,9 +302,10 @@ try {
     strict: true,
   });
 
-  // Convert threads string to number if provided
+  // Convert string-typed numeric options to numbers
   const processedValues = {
     ...values,
+    tabSize: values.tabSize ? parseInt(values.tabSize, 10) : undefined,
     threads: values.threads ? parseInt(values.threads, 10) : undefined,
   };
 
@@ -345,6 +352,8 @@ const showInfoDiagnostics = argv.showInfoDiagnostics;
 const outputFormat = argv.outputFormat;
 const patchFile = argv.patchFile;
 const threads = argv.threads;
+const tabSize = argv.tabSize;
+const insertSpaces = argv.insertSpaces;
 const diagnosticsConfigPath = argv.diagnosticsConfig;
 
 if (diagnosticsConfigPath && argv.file) {
@@ -938,8 +947,8 @@ const formatFile = async (
       uri: `file://${absPath}`,
     },
     options: {
-      tabSize: 8,
-      insertSpaces: false,
+      tabSize: tabSize,
+      insertSpaces: insertSpaces,
       trimTrailingWhitespace: true,
       insertFinalNewline: true,
       trimFinalNewlines: true,
