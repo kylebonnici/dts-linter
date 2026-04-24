@@ -35,23 +35,36 @@ dts-linter --formatFixAll
 
 ### Command Line Options
 
-| Option                  | Type            | Default         | Description                                                                                        |
-| ----------------------- | --------------- | --------------- | -------------------------------------------------------------------------------------------------- |
-| `--file`                | string          | Auto-discover   | List of input files (can be repeated)                                                              |
-| `--cwd`                 | string          | `process.cwd()` | Set the current working directory                                                                  |
-| `--include`             | string          | `[]`            | Paths to resolve includes (absolute or relative to CWD, can be repeated)                           |
-| `--binding`             | string          | `[]`            | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                     |
-| `--logLevel`            | `none\|verbose` | `none`          | Set the logging verbosity                                                                          |
-| `--format`              | boolean         | `false`         | Format the specified files (automatically set to true when formatFixAll)                           |
-| `--formatFixAll`        | boolean         | `false`         | Apply formatting changes directly to files                                                         |
-| `--diagnostics`         | boolean         | `false`         | Show basic syntax diagnostics                                                                      |
-| `--diagnosticsFull`     | boolean         | `false`         | Show full diagnostics including semantic analysis (requires --include, --binding for proper usage) |
-| `--diagnosticsConfig`   | string          | -               | Path to json file with test case configurations for complex diagnostics                            |
-| `--showInfoDiagnostics` | boolean         | `false`         | Show information-level diagnostics                                                                 |
-| `--patchFile`           | string          | -               | Write formatting diff output to file                                                               |
-| `--outputType`          | string          | `auto`          | Output format type: auto, pretty, annotations, or json                                             |
-| `--threads`             | number          | `1`             | Number of parallel LSP instances to use for processing files                                       |
-| `--help`                | boolean         | `false`         | Show help information                                                                              |
+| Option                                | Type                              | Default           | Description                                                                                        |
+| ------------------------------------- | --------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------- |
+| `--file`                              | string                            | Auto-discover     | List of input files (can be repeated)                                                              |
+| `--filetypes`                         | string                            | `dts,dtsi,overlay`| Comma-separated file extensions to search when `--file` is not set                                |
+| `--cwd`                               | string                            | `process.cwd()`   | Set the current working directory                                                                  |
+| `--include`                           | string                            | `[]`              | Paths to resolve includes (absolute or relative to CWD, can be repeated)                          |
+| `--binding`                           | string                            | `[]`              | Zephyr binding root directories (absolute or relative to CWD, can be repeated)                    |
+| `--logLevel`                          | `none\|verbose`                   | `none`            | Set the logging verbosity                                                                          |
+| `--format`                            | boolean                           | `false`           | Format the specified files (automatically set to true when formatFixAll)                           |
+| `--formatFixAll`                      | boolean                           | `false`           | Apply formatting changes directly to files                                                         |
+| `--tabSize`                           | number                            | `8`               | Number of spaces per indentation level                                                             |
+| `--insertSpaces`                      | boolean                           | `false`           | Use spaces instead of tabs for indentation                                                         |
+| `--disableBaseFormattingRules`        | boolean                           | `false`           | Disable base formatting rules                                                                      |
+| `--disableIndentExpressions`          | boolean                           | `false`           | Disable indentation for expressions when formatting                                                |
+| `--disableRemoveDuplicateProperties`  | boolean                           | `false`           | Disable removal of duplicate properties in the same scope                                          |
+| `--disableRemoveEmptyReferences`      | boolean                           | `false`           | Disable removal of empty references                                                                |
+| `--enableRemoveEmptyNodes`            | boolean                           | `false`           | Enable removal of empty nodes                                                                      |
+| `--enableRemoveEmptyRoots`            | boolean                           | `false`           | Enable removal of empty root nodes                                                                 |
+| `--enableSortNodesAndProperties`      | boolean                           | `false`           | Enable sorting of nodes and properties                                                             |
+| `--sortNodesNodesBy`                  | `none\|name\|address`             | `none`            | When sorting nodes, sort by name or address                                                        |
+| `--enableSortPropertiesAlphabetically`| boolean                           | `false`           | Enable sorting of properties alphabetically                                                        |
+| `--diagnostics`                       | boolean                           | `false`           | Show basic syntax diagnostics                                                                      |
+| `--diagnosticsFull`                   | boolean                           | `false`           | Show full diagnostics including semantic analysis (requires --include, --binding for proper usage) |
+| `--diagnosticsConfig`                 | string                            | -                 | Path to json file with test case configurations for complex diagnostics                            |
+| `--showInfoDiagnostics`               | boolean                           | `false`           | Show information-level diagnostics                                                                 |
+| `--patchFile`                         | string                            | -                 | Write formatting diff output to file                                                               |
+| `--outputFormat`                      | `auto\|pretty\|annotations\|json` | `auto`            | Output format type                                                                                 |
+| `--threads`                           | number                            | `1`               | Number of parallel LSP instances to use for processing files                                       |
+| `--version`                           | boolean                           | `false`           | Show version information                                                                           |
+| `--help`                              | boolean                           | `false`           | Show help information                                                                              |
 
 ### Examples
 
@@ -87,7 +100,7 @@ dts-linter --format --diagnostics --threads 4
 
 ## File Discovery
 
-When no `--file` option is provided, the linter automatically searches for DeviceTree files using the pattern `**/*.{dts,dtsi,overlay}` or `**/*.{dts}` when using `--diagnosticsFull` in the current working directory.
+When no `--file` option is provided, the linter automatically searches for DeviceTree files using the pattern `**/*.{dts,dtsi,overlay}` (or `**/*.dts` when using `--diagnosticsFull`) in the current working directory. Use `--filetypes` to customize which extensions are searched.
 
 ## Performance and Threading
 
