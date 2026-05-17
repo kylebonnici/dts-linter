@@ -1032,7 +1032,7 @@ const formatFile = async (
     if (!diff) {
       log(
         "error",
-        `${relative(cwd, absPath)} unable to generate diff due to /* dts-format off */`,
+        `${relative(cwd, absPath)} unable to generate diff to format file.`,
         undefined,
         undefined,
         undefined,
