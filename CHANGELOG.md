@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [0.5.1] - Unreleased
 
+### Changed
+
+- Added .keymap used by [ZMK](https://github.com/zmkfirmware/zmk) to default file format when no `--file` is passed.
+
 ### Fixed
 
 - Added CLI options to use spaces for indent, indent width, and default filetypes [Contribution by [urob](https://github.com/urob)]
