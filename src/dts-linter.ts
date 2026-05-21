@@ -225,6 +225,7 @@ const schema = z.object({
     .enum(["auto", "pretty", "annotations", "json"])
     .optional()
     .default("auto"),
+  wordWrapColumn: z.number().int().min(1).optional().default(100),
   tabSize: z.number().int().min(1).optional().default(8),
   insertSpaces: z.boolean().optional().default(false),
   filetypes: z.array(z.string()).optional(),
@@ -258,6 +259,7 @@ Options:
   --diagnosticsFull                               Show full diagnostics for files (default: false).
   --diagnosticsConfig <path>                      Path to diagnostics configuration file.
   --showInfoDiagnostics                           Show information diagnostics
+  --wordWrapColumn <number>                       Column at which to wrap long lines when formatting (default: 100).
   --tabSize <number>                              Number of spaces per indentation level (default: 8).
   --insertSpaces                                  Use spaces instead of tabs for indentation (default: false).
   --patchFile <path>                              Write formatting diff output to this file (optional).
@@ -293,6 +295,7 @@ try {
       diagnosticsFull: { type: "boolean" },
       diagnosticsConfig: { type: "string" },
       showInfoDiagnostics: { type: "boolean" },
+      wordWrapColumn: { type: "string" },
       tabSize: { type: "string" },
       insertSpaces: { type: "boolean" },
       patchFile: { type: "string" },
@@ -308,6 +311,9 @@ try {
   // Convert string-typed numeric options to numbers; split comma-separated filetypes
   const processedValues = {
     ...values,
+    wordWrapColumn: values.wordWrapColumn
+      ? parseInt(values.wordWrapColumn, 10)
+      : undefined,
     tabSize: values.tabSize ? parseInt(values.tabSize, 10) : undefined,
     threads: values.threads ? parseInt(values.threads, 10) : undefined,
     filetypes: values.filetypes
@@ -361,6 +367,7 @@ const showInfoDiagnostics = argv.showInfoDiagnostics;
 const outputFormat = argv.outputFormat;
 const patchFile = argv.patchFile;
 const threads = argv.threads;
+const wordWrapColumn = argv.wordWrapColumn;
 const tabSize = argv.tabSize;
 const insertSpaces = argv.insertSpaces;
 const diagnosticsConfigPath = argv.diagnosticsConfig;
@@ -968,6 +975,7 @@ const formatFile = async (
       uri: `file://${absPath}`,
     },
     options: {
+      wordWrapColumn: wordWrapColumn,
       tabSize: tabSize,
       insertSpaces: insertSpaces,
       trimTrailingWhitespace: true,
