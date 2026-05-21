@@ -1057,12 +1057,15 @@ const formatFile = async (
       }
     }
 
-    if (!diff) {
+    const noFormattingDiff = result.diagnostics.filter(
+      (d) => d.data?.edit?.length === 0,
+    );
+    if (noFormattingDiff.length) {
       let message = `${relative(cwd, absPath)} unable to generate diff to format file.`;
       if (outputFormat !== "json" && outputFormat !== "annotations") {
         message +=
           "\n\t" +
-          result.diagnostics
+          noFormattingDiff
             .map(
               (issue) =>
                 `[${diagnosticSeverityToString(issue.severity)}] ${
