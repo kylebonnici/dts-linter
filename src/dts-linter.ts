@@ -992,7 +992,13 @@ const formatFile = async (
   const result = (await connection.sendRequest(
     "devicetree/formattingText",
     params,
-  )) as { text: string; diagnostics: Diagnostic[] } | undefined;
+  )) as
+    | {
+        text: string;
+        diagnostics: Diagnostic[];
+        nonActionableDiagnostics: Diagnostic[];
+      }
+    | undefined;
 
   const indent = mainFile ? "" : "\t";
 
@@ -1057,15 +1063,15 @@ const formatFile = async (
       }
     }
 
-    const noFormattingDiff = result.diagnostics.filter(
-      (d) => d.data?.edit?.length === 0,
-    );
-    if (noFormattingDiff.length) {
+    if (
+      "nonActionableDiagnostics" in result &&
+      result.nonActionableDiagnostics.length
+    ) {
       let message = `${relative(cwd, absPath)} unable to generate diff to format file.`;
       if (outputFormat !== "json" && outputFormat !== "annotations") {
         message +=
           "\n\t" +
-          noFormattingDiff
+          result.nonActionableDiagnostics
             .map(
               (issue) =>
                 `[${diagnosticSeverityToString(issue.severity)}] ${
