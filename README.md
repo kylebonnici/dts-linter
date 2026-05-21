@@ -2,7 +2,7 @@
 
 # DTS Linter
 
-A comprehensive DeviceTree linter and formatter that provides syntax checking, formatting, and diagnostic capabilities for DeviceTree Source (.dts), DeviceTree Source Include (.dtsi), overlay files as ZMK .keymap.
+A comprehensive DeviceTree linter and formatter that provides syntax checking, formatting, and diagnostic capabilities for DeviceTree Source (.dts), DeviceTree Source Include (.dtsi), overlay files and ZMK .keymap.
 
 ## Features
 
