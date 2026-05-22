@@ -4,13 +4,30 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [0.5.1] - Unreleased
+## [0.5.1] - 2026-05-23
+
+### Changed
+
+- Bump up `devicetree-language-server` to version 0.9.4 to address:
+  - Function like macros can have white space when called provided macro definition is found.
+    example `prop=<FOO (20)>;` is interpreted as `prop=<10 (20)>;` if `#define FOO 10` is defined
+    while `prop=<FOO (20)>;` is interpreted as `prop=<20>;` if `#define FOO(x) x` is defined. If `FOO`
+    is not defined then `Unknown macro` is showed in diagnostics. NOTE: when formatting a file, it is
+    parsed as a standalone. Hence the macro definition MUST be in the same file.
 
 ### Fixed
 
 - Added CLI options to use spaces for indent, indent width, and default filetypes [Contribution by [urob](https://github.com/urob)]
 - Fixed false-positive formatting failure when diagnostics are present. [Fixed by [urob](https://github.com/urob)]
 - Fixed log message when diff is not able to be generated.
+- Bump up `devicetree-language-server` to version 0.9.4 to address:
+  - Fixed `#` stringification in function-like macros. [Fixed by [urob](https://github.com/urob)]
+  - Fixed Unknown syntax error with multiple elif branches. [Contribution by [urob](https://github.com/urob)]
+  - Fixed idempotence violation when formatting multiline comments inside arrays.
+  - Fixed showing and applying formatting issue from virtual documents. [Contribution by [urob](https://github.com/urob)]
+  - Fixed idempotence violation when formatting long lines inside disabled #if guards. [Contribution by [urob](https://github.com/urob)]
+  - Fixed file corruption when using `insertSpaces=true` inside disabled #if guards. [Contribution by [urob](https://github.com/urob)]
+  - Fixed formatting configuration default `defaultFormatter` to `KyleMicallefBonnici.dts-lsp` [Contribution by [yijiyang](https://github.com/yijiyang)]
 
 ## [0.5.0] - 2026-04-01
 
