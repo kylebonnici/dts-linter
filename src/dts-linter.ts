@@ -1073,10 +1073,7 @@ const formatFile = async (
       }
     }
 
-    if (
-      "nonActionableDiagnostics" in result &&
-      result.nonActionableDiagnostics.length
-    ) {
+    if (result.nonActionableDiagnostics.length) {
       let message = `${relative(cwd, absPath)} unable to generate diff to format file.`;
       if (outputFormat !== "json" && outputFormat !== "annotations") {
         message +=
