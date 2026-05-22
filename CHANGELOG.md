@@ -15,8 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
     is not defined then `Unknown macro` is showed in diagnostics. NOTE: when formatting a file, it is
     parsed as a standalone. Hence the macro definition MUST be in the same file.
 
+### Changed
+
+- Added .keymap used by [ZMK](https://github.com/zmkfirmware/zmk) to default file format when no `--file` is passed.
+
 ### Fixed
 
+- Added CLI option to set line width [Contribution by [urob](https://github.com/urob)]
 - Added CLI options to use spaces for indent, indent width, and default filetypes [Contribution by [urob](https://github.com/urob)]
 - Fixed false-positive formatting failure when diagnostics are present. [Fixed by [urob](https://github.com/urob)]
 - Fixed log message when diff is not able to be generated.
