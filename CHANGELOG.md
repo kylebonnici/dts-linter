@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.2] - 2026-10-22
+
+### Security
+
+- Update dependency to address:
+  - CVE-2026-13149
+  - CVE-2026-14257
+  - CVE-2026-69152
+  - CVE-2026-102277
+  - CVE-2026-102278
+  - CVE-2026-102276
+
+
+### Fixed
+
+- Bump up `devicetree-language-server` to version 0.14.3 to address:
+  - non-idempotent formatting of files containing `#ifdef` blocks when node and property sorting are enabled.
+
 ## [0.5.1] - 2026-05-23
 
 ### Changed
