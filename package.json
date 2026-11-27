@@ -8,6 +8,7 @@
   },
   "scripts": {
     "compile": "node ./esbuild.js",
+    "prepare": "node ./esbuild.js --production",
     "compile:prod": "node ./esbuild.js --production"
   },
   "bin": "./dist/dts-linter.js",
