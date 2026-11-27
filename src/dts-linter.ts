@@ -273,7 +273,7 @@ Example:
 
 let argv: SchemaType;
 try {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: {
       file: { type: "string", multiple: true },
       cwd: { type: "string" },
@@ -306,7 +306,9 @@ try {
       help: { type: "boolean" },
     },
     strict: true,
+    allowPositionals: true,
   });
+  values.file = [...(values.file ?? []), ...positionals];
 
   // Convert string-typed numeric options to numbers; split comma-separated filetypes
   const processedValues = {

@@ -1,0 +1,6 @@
+- id: dts-linter
+  entry: dts-linter
+  name: devicetree linter
+  language: node
+  files: .*\.(dts|dtsi|overlay|keymap)$
+  args: [--format]
